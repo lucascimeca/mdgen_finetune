@@ -16,13 +16,14 @@ parser.add_argument('--num_workers', type=int, default=1)
 
 args = parser.parse_args()
 
-import mdgen.analysis
+import src.mdgen.analysis
 import pyemma, tqdm, os, pickle
 from scipy.spatial.distance import jensenshannon
 from multiprocessing import Pool
 import numpy as np
 import matplotlib.pyplot as plt
-from statsmodels.tsa.stattools import acovf, acf
+from statsmodels.tsa.stattools import acovf
+
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 def main(name):
@@ -32,18 +33,18 @@ def main(name):
 
     ### BACKBONE torsion marginals PLOT ONLY
     if args.plot:
-        feats, traj = mdgen.analysis.get_featurized_traj(f'{args.pdbdir}/{name}', sidechains=False, cossin=False)
+        feats, traj = src.mdgen.analysis.get_featurized_traj(f'{args.pdbdir}/{name}', sidechains=False, cossin=False)
         if args.truncate: traj = traj[:args.truncate]
-        feats, ref = mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=False, cossin=False)
+        feats, ref = src.mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=False, cossin=False)
         pyemma.plots.plot_feature_histograms(ref, feature_labels=feats, ax=axs[0,0], color=colors[0])
         pyemma.plots.plot_feature_histograms(traj, ax=axs[0,0], color=colors[1])
         axs[0,0].set_title('BB torsions')
 
     
     ### JENSEN SHANNON DISTANCES ON ALL TORSIONS
-    feats, traj = mdgen.analysis.get_featurized_traj(f'{args.pdbdir}/{name}', sidechains=True, cossin=False)
+    feats, traj = src.mdgen.analysis.get_featurized_traj(f'{args.pdbdir}/{name}', sidechains=True, cossin=False)
     if args.truncate: traj = traj[:args.truncate]
-    feats, ref = mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True, cossin=False)
+    feats, ref = src.mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True, cossin=False)
 
     out['features'] = feats.describe()
 
@@ -101,11 +102,11 @@ def main(name):
         axs[1,2].set_xscale('log')
 
     ####### TICA #############
-    feats, traj = mdgen.analysis.get_featurized_traj(f'{args.pdbdir}/{name}', sidechains=True, cossin=True)
+    feats, traj = src.mdgen.analysis.get_featurized_traj(f'{args.pdbdir}/{name}', sidechains=True, cossin=True)
     if args.truncate: traj = traj[:args.truncate]
-    feats, ref = mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True, cossin=True)
+    feats, ref = src.mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True, cossin=True)
 
-    tica, _ = mdgen.analysis.get_tica(ref)
+    tica, _ = src.mdgen.analysis.get_tica(ref)
     ref_tica = tica.transform(ref)
     traj_tica = tica.transform(traj)
     
@@ -151,17 +152,17 @@ def main(name):
 
     ###### Markov state model stuff #################
     if not args.no_msm:
-        kmeans, ref_kmeans = mdgen.analysis.get_kmeans(tica.transform(ref))
+        kmeans, ref_kmeans = src.mdgen.analysis.get_kmeans(tica.transform(ref))
         try:
-            msm, pcca, cmsm = mdgen.analysis.get_msm(ref_kmeans, nstates=10)
+            msm, pcca, cmsm = src.mdgen.analysis.get_msm(ref_kmeans, nstates=10)
     
             out['kmeans'] = kmeans
             out['msm'] = msm
             out['pcca'] = pcca
             out['cmsm'] = cmsm
         
-            traj_discrete = mdgen.analysis.discretize(tica.transform(traj), kmeans, msm)
-            ref_discrete = mdgen.analysis.discretize(tica.transform(ref), kmeans, msm)
+            traj_discrete = src.mdgen.analysis.discretize(tica.transform(traj), kmeans, msm)
+            ref_discrete = src.mdgen.analysis.discretize(tica.transform(ref), kmeans, msm)
             out['traj_metastable_probs'] = (traj_discrete == np.arange(10)[:,None]).mean(1)
             out['ref_metastable_probs'] = (ref_discrete == np.arange(10)[:,None]).mean(1)
             ######### 

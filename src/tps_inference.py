@@ -9,24 +9,22 @@ parser.add_argument('--data_dir', type=str, default='share/4AA_data')
 parser.add_argument('--mddir', type=str, default='/data/cb/scratch/share/mdgen/4AA_sims')
 parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--pdb_id', nargs='*', default=[])
-parser.add_argument('--num_frames', type=int, default=100)
+parser.add_argument('--num_frames', type=int, default=1000)
 parser.add_argument('--num_batches', type=int, default=100)
 parser.add_argument('--batch_size', type=int, default=10)
 parser.add_argument('--out_dir', type=str, default=".")
-parser.add_argument('--random_start_idx', action='store_true')
 parser.add_argument('--split', type=str, default='splits/4AA_test.csv')
 parser.add_argument('--chunk_idx', type=int, default=0)
 parser.add_argument('--n_chunks', type=int, default=1)
 args = parser.parse_args()
-import mdgen.analysis
+import src.mdgen.analysis
 import os, torch, mdtraj, tqdm
-import numpy as np
-from mdgen.geometry import atom14_to_frames, atom14_to_atom37, atom37_to_torsions
-from mdgen.tensor_utils import tensor_tree_map
+from src.mdgen.geometry import atom14_to_atom37, atom37_to_torsions
+from src.mdgen.tensor_utils import tensor_tree_map
 
-from mdgen.residue_constants import restype_order, restype_atom37_mask
-from mdgen.wrapper import NewMDGenWrapper
-from mdgen.dataset import atom14_to_frames
+from src.mdgen.residue_constants import restype_order
+from src.mdgen.wrapper import NewMDGenWrapper
+from src.mdgen.dataset import atom14_to_frames
 import pandas as pd
 import contextlib
 import numpy as np
@@ -42,28 +40,37 @@ def temp_seed(seed):
 
 os.makedirs(args.out_dir, exist_ok=True)
 
-def get_sample(arr, seqres, start_idxs, start_state, end_state, num_frames=100):
+def get_sample(arr, seqres, start_idxs, end_idxs, start_state, end_state, num_frames=1000):
     start_idx = np.random.choice(start_idxs, 1).item()
-    if args.random_start_idx:
-        start_idx = np.random.randint(low=0,high=len(arr)-num_frames)
-    end_idx = start_idx + num_frames
+    end_idx = np.random.choice(end_idxs, 1).item()
 
-    arr = np.copy(arr[start_idx: end_idx]).astype(np.float32)
+    start_arr = np.copy(arr[start_idx:start_idx + 1]).astype(np.float32)
+    end_arr = np.copy(arr[end_idx:end_idx + 1]).astype(np.float32)
     seqres = torch.tensor([restype_order[c] for c in seqres])
 
-    frames = atom14_to_frames(torch.from_numpy(arr))
-    atom37 = torch.from_numpy(atom14_to_atom37(arr, seqres)).float()
-    torsions, torsion_mask = atom37_to_torsions(atom37, seqres[None])
+    start_frames = atom14_to_frames(torch.from_numpy(start_arr))
+    start_atom37 = torch.from_numpy(atom14_to_atom37(start_arr, seqres)).float()
+    start_torsions, start_torsion_mask = atom37_to_torsions(start_atom37, seqres[None])
+    
+    end_frames = atom14_to_frames(torch.from_numpy(end_arr))
+    end_atom37 = torch.from_numpy(atom14_to_atom37(end_arr, seqres)).float()
+    end_torsions, end_torsion_mask = atom37_to_torsions(end_atom37, seqres[None])
+    L = start_frames.shape[1]
+    traj_torsions = start_torsions.expand(num_frames, -1, -1, -1).clone()
+    traj_torsions[-1] = end_torsions
 
-    L = frames.shape[1]
+    traj_trans = start_frames._trans.expand(num_frames, -1, -1).clone()
+    traj_trans[-1] = end_frames._trans
 
+    traj_rots = start_frames._rots._rot_mats.expand(num_frames, -1, -1, -1).clone()
+    traj_rots[-1] = end_frames._rots._rot_mats
 
     mask = torch.ones(L)
     return {
-        'torsions': torsions,
-        'torsion_mask': torsion_mask[0],
-        'trans': frames._trans,
-        'rots': frames._rots._rot_mats,
+        'torsions': traj_torsions,
+        'torsion_mask': start_torsion_mask[0],
+        'trans': traj_trans,
+        'rots': traj_rots,
         'seqres': seqres,
         'start_idx': start_idx,
         'end_idx': end_idx,
@@ -74,6 +81,8 @@ def get_sample(arr, seqres, start_idxs, start_state, end_state, num_frames=100):
 
 def do(model, name, seqres):
     print('doing', name)
+    if os.path.exists(f'{args.out_dir}/{name}_metadata.json'):
+        return
     if os.path.exists(f'{args.out_dir}/{name}_metadata.pkl'):
         pkl_metadata = pickle.load(open(f'{args.out_dir}/{name}_metadata.pkl', 'rb'))
         msm = pkl_metadata['msm']
@@ -81,11 +90,11 @@ def do(model, name, seqres):
         ref_kmeans = pkl_metadata['ref_kmeans']
     else:
         with temp_seed(137):
-            feats, ref = mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True)
-            tica, _ = mdgen.analysis.get_tica(ref)
-            kmeans, ref_kmeans = mdgen.analysis.get_kmeans(tica.transform(ref))
+            feats, ref = src.mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True)
+            tica, _ = src.mdgen.analysis.get_tica(ref)
+            kmeans, ref_kmeans = src.mdgen.analysis.get_kmeans(tica.transform(ref))
             try:
-                msm, pcca, cmsm = mdgen.analysis.get_msm(ref_kmeans, nstates=10)
+                msm, pcca, cmsm = src.mdgen.analysis.get_msm(ref_kmeans, nstates=10)
             except Exception as e:
                 print('ERROR', e, name, flush=True)
                 return
@@ -99,38 +108,28 @@ def do(model, name, seqres):
         }, open(f'{args.out_dir}/{name}_metadata.pkl', 'wb'))
 
     flux_mat = cmsm.transition_matrix * cmsm.pi[None, :]
-    np.fill_diagonal(flux_mat, 0)
-    start_state, end_state = np.unravel_index(np.argmax(flux_mat, axis=None), flux_mat.shape)
+    flux_mat[flux_mat < 0.0000001] = np.inf  # set 0 flux to inf so we do not choose that as the argmin
+    start_state, end_state = np.unravel_index(np.argmin(flux_mat, axis=None), flux_mat.shape)
     ref_discrete = msm.metastable_assignments[ref_kmeans]
-    
-    arr = np.lib.format.open_memmap(f'{args.data_dir}/{name}.npy', 'r')
-    if model.args.frame_interval:
-        arr = arr[::model.args.frame_interval]
-        ref_discrete = ref_discrete[::model.args.frame_interval]
-    
-    is_start = ref_discrete == start_state
-    is_end = ref_discrete == end_state
-
-    trans_indices = is_start[:-args.num_frames] * is_end[args.num_frames:]
-    start_idxs = np.where(trans_indices)[0]
-    if (trans_indices).sum() == 0:
-        print('No transition path found for ', name, 'skipping...')
+    start_idxs = np.where(ref_discrete == start_state)[0]
+    end_idxs = np.where(ref_discrete == end_state)[0]
+    if (ref_discrete == start_state).sum() == 0 or (ref_discrete == end_state).sum() == 0:
+        print('No start or end state found for ', name, 'skipping...')
         return
 
-    
+    arr = np.lib.format.open_memmap(f'{args.data_dir}/{name}.npy', 'r')
 
     metadata = []
     for i in tqdm.tqdm(range(args.num_batches), desc='num batch'):
         batch_list = []
         for _ in range(args.batch_size):
             batch_list.append(
-                get_sample(arr, seqres, copy.deepcopy(start_idxs), start_state, end_state, num_frames=args.num_frames))
+                get_sample(arr, seqres, copy.deepcopy(start_idxs), end_idxs, start_state, end_state, num_frames=args.num_frames))
         batch = next(iter(torch.utils.data.DataLoader(batch_list, batch_size=args.batch_size)))
         batch = tensor_tree_map(lambda x: x.cuda(), batch)
-
-
-        print('Start tps for ', name, 'with start coords', batch['trans'][0, 0, 0], 'and with end coords', batch['trans'][0, -1, 0])
-        atom14s, aa_out = model.inference(batch)
+        print('Start tps for ', name, 'with start coords', batch['trans'][0, 0, 0])
+        print('Start tps for ', name, 'with end coords', batch['trans'][0, -1, 0])
+        atom14s, _ = model.inference(batch)
         for j in range(args.batch_size):
             idx = i * args.batch_size + j
             path = os.path.join(args.out_dir, f'{name}_{idx}.pdb')
@@ -146,7 +145,6 @@ def do(model, name, seqres):
                 'end_idx': batch['end_idx'][j].cpu().item(),
                 'start_state': batch['start_state'][j].cpu().item(),
                 'end_state': batch['end_state'][j].cpu().item(),
-                'aa_out': aa_out[j].cpu().numpy().tolist(),  # 'aa_out': 'aa_out',
                 'path': path,
             })
     json.dump(metadata, open(f'{args.out_dir}/{name}_metadata.json', 'w'))

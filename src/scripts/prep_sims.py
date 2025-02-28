@@ -14,7 +14,7 @@ import mdtraj, os, tqdm
 import pandas as pd 
 from multiprocessing import Pool
 import numpy as np
-from mdgen import residue_constants as rc
+from src.mdgen import residue_constants as rc
 
 os.makedirs(args.outdir, exist_ok=True)
 

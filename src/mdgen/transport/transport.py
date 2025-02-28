@@ -1,5 +1,4 @@
 # https://github.com/willisma/SiT/
-import copy
 
 import torch
 import torch as th

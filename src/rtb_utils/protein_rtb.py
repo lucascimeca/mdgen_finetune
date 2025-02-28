@@ -13,7 +13,6 @@ from tqdm import tqdm
 import random
 
 from sde import VPSDE, DDPM
-import reward_models
 import rtb_utils as utils
 
 
@@ -566,13 +565,6 @@ class ProteinRTBModel(nn.Module):
     def finetune(self, shape, n_iters=100000, learning_rate=5e-5, clip=0.1, wandb_track=False, prior_sample_prob=0.0,
                  replay_buffer_prob=0.0, anneal=False, anneal_steps=15000):
         B, *D = shape
-
-        if hasattr(self.reward_model, 'protein_type'):
-            num_test_samples = 10
-            protein_type = True
-        else:
-            num_test_samples = 10
-            protein_type = False
 
         param_list = [{'params': self.model.parameters()}]
         optimizer = torch.optim.Adam(param_list, lr=learning_rate)

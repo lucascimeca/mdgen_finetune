@@ -5,7 +5,7 @@ parser.add_argument("--mddir", default='share/4AA_sims_implicit')
 parser.add_argument('--pdb_id', nargs='*', default=[])
 args = parser.parse_args()
 
-import mdgen.analysis
+import src.mdgen.analysis
 import tqdm, os
 import matplotlib.pyplot as plt
 from statsmodels.tsa.stattools import acovf
@@ -13,8 +13,8 @@ import numpy as np
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 def do(name):
-    feats, ref = mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True, cossin=False)
-    feats, traj = mdgen.analysis.get_featurized_traj(f'{args.pdbdir}/{name}', sidechains=True, cossin=False)
+    feats, ref = src.mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True, cossin=False)
+    feats, traj = src.mdgen.analysis.get_featurized_traj(f'{args.pdbdir}/{name}', sidechains=True, cossin=False)
 
 
     md_autocorr = {}

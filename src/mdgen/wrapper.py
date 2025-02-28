@@ -402,6 +402,17 @@ class NewMDGenWrapper(Wrapper):
         self.last_log_time = time.time()
         return loss.mean()
 
+    def get_dims(self, batch):
+        prep = self.prep_batch(batch)
+
+        latents = prep['latents']
+        if not self.args.no_frames:
+            rigids = prep['rigids']
+            B, T, L = rigids.shape
+        else:
+            B, T, L, _ = latents.shape
+        return B, T, L, self.latent_dim
+
     def inference(self, batch, zs0=None):
 
         prep = self.prep_batch(batch)
@@ -465,7 +476,6 @@ class NewMDGenWrapper(Wrapper):
             torsions = samples[..., 7:21]
             logits = samples[..., -20:]
 
-        
         if self.args.no_offsets:
             frames = Rigid.from_tensor_7(offsets, normalize_quats=True)
         else:

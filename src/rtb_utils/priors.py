@@ -6,11 +6,11 @@ import tqdm
 import numpy as np
 import pandas as pd
 
-from mdgen.geometry import atom14_to_frames, atom14_to_atom37, atom37_to_torsions
-from mdgen.residue_constants import restype_order, restype_atom37_mask
-from mdgen.tensor_utils import tensor_tree_map
-from mdgen.wrapper import NewMDGenWrapper
-from mdgen.utils import atom14_to_pdb
+from src.mdgen.geometry import atom14_to_frames, atom14_to_atom37, atom37_to_torsions
+from src.mdgen.residue_constants import restype_order, restype_atom37_mask
+from src.mdgen.tensor_utils import tensor_tree_map
+from src.mdgen.wrapper import NewMDGenWrapper
+from src.mdgen.utils import atom14_to_pdb
 
 
 class MDGenSimulator:
@@ -71,6 +71,11 @@ class MDGenSimulator:
 
         # Load the split file.
         self.df = pd.read_csv(self.split, index_col='name')
+
+        item = self._get_batch()
+        self.batch = next(iter(torch.utils.data.DataLoader([item])))
+        self.batch = tensor_tree_map(lambda x: x.to(self.device), self.batch)
+        self.dims = self.model.get_dims(self, self.batch)
 
     def _get_batch(self):
         """
@@ -153,39 +158,8 @@ class MDGenSimulator:
 
         return atom14, new_batch
 
-    def _do(self, zs0=None):
-        """
-        Run the simulation for a given name and residue sequence, and write output files.
 
-        Parameters:
-            name (str): The simulation identifier.
-            seqres (str): Residue sequence string.
-        """
-        item = self._get_batch()
-        batch = next(iter(torch.utils.data.DataLoader([item])))
-        batch = tensor_tree_map(lambda x: x.to(self.device), batch)
-
-        all_atom14 = []
-        start_time = time.time()
-        for _ in tqdm.trange(self.num_rollouts, desc=f"Rollouts for {name}"):
-            atom14, batch = self._rollout(batch, zs0=zs0)
-            all_atom14.append(atom14)
-        elapsed = time.time() - start_time
-        print(f"Simulation for {name} took {elapsed:.2f} seconds.")
-
-        all_atom14 = torch.cat(all_atom14, 1)
-        pdb_path = os.path.join(self.out_dir, f"{name}.pdb")
-        atom14_to_pdb(all_atom14[0].cpu().numpy(), batch['seqres'][0].cpu().numpy(), pdb_path)
-
-        if self.xtc:
-            traj = mdtraj.load(pdb_path)
-            traj.superpose(traj)
-            xtc_path = os.path.join(self.out_dir, f"{name}.xtc")
-            traj.save(xtc_path)
-            # Overwrite the pdb with the first frame after superposition
-            traj[0].save(pdb_path)
-
-    def sample(self, peptide=None, zs0=None):
+    def sample(self, zs0=None):
         """
         Run one simulation and generate the corresponding pdb file.
 
@@ -193,4 +167,30 @@ class MDGenSimulator:
             name (str, optional): The simulation identifier. If not provided, the first valid
                                   simulation from the split file is used.
         """
-        self._do(zs0=zs0)
+        """
+          Run the simulation for a given name and residue sequence, and write output files.
+
+          Parameters:
+              name (str): Name of peptide.
+              seqres (str): Residue sequence string.
+          """
+
+        all_atom14 = []
+        start_time = time.time()
+        for _ in tqdm.trange(self.num_rollouts, desc=f"Rollouts for {self.peptide}"):
+            atom14, batch = self._rollout(self.batch, zs0=zs0)
+            all_atom14.append(atom14)
+        elapsed = time.time() - start_time
+        print(f"Simulation for {self.peptide} took {elapsed:.2f} seconds.")
+
+        all_atom14 = torch.cat(all_atom14, 1)
+        pdb_path = os.path.join(self.out_dir, f"{self.peptide}.pdb")
+        atom14_to_pdb(all_atom14[0].cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), pdb_path)
+
+        if self.xtc:
+            traj = mdtraj.load(pdb_path)
+            traj.superpose(traj)
+            xtc_path = os.path.join(self.out_dir, f"{self.peptide}.xtc")
+            traj.save(xtc_path)
+            # Overwrite the pdb with the first frame after superposition
+            traj[0].save(pdb_path)

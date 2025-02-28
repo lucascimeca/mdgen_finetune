@@ -1,7 +1,7 @@
 import sys
 
-from rtb_utils.priors import MDGenSimulator
-from rtb_utils.rewards import Amber14Reward
+from src.rtb_utils.priors import MDGenSimulator
+from src.rtb_utils.rewards import Amber14Reward
 
 sys.path.append('./proteins/')
 
@@ -12,10 +12,10 @@ import random
 import argparse
 from distutils.util import strtobool
 
-from rtb_utils import protein_rtb
+from src.rtb_utils import protein_rtb
 #import tb_sample_xt
 #import tb 
-from rtb_utils.replay_buffer import ReplayBuffer
+from src.rtb_utils.replay_buffer import ReplayBuffer
 
 # from proteins.reward_ss_div import SSDivReward # SUBSTUITUTE
 # from proteins.foldflow_prior import FoldFlowModel   # SUBSTITUTE
@@ -48,10 +48,8 @@ parser.add_argument('--load_ckpt', default=False, type=strtobool, help='Whether 
 parser.add_argument('--load_path', default=None, type=str, help='Path to load model checkpoint')
 
 parser.add_argument('--langevin', default=False, type=strtobool, help="Whether to use Langevin dynamics for sampling")
-parser.add_argument('--compute_fid', default=False, type=strtobool, help="Whether to compute FID score during training (every 1k steps)")
 
 parser.add_argument('--inference', default='vpsde', type=str, help='Inference method for prior', choices=['vpsde', 'ddpm'])
-parser.add_argument('--sampler_time', default = 0., type=float, help='Sampler learns to sample from p_t')
 parser.add_argument('--seed', default=0, type=int, help='Random seed for training')
 parser.add_argument('--clip', default=0.1, type=float, help='Gradient clipping value')
 
@@ -78,20 +76,20 @@ r_str = "ss_div_seed_" + str(args.seed)
 
 reward_args = []
 
-seq_len = 64
-
-in_shape = (seq_len, 7)
 prior_model = MDGenSimulator(
     peptide='FLRH',
     sim_ckpt='pretrained/forward_sim.ckpt',
-    data_dir='data/4AA_data',
+    data_dir='../data/4AA_data',
     split='splits/4AA_test.csv',
-    num_rollouts=10,
-    num_frames=1000,
+    num_rollouts=1,
+    num_frames=args.batch_size,
     xtc=True,
-    out_dir='./samples/',
+    out_dir='../samples/',
     suffix='_i100'
 )
+
+in_shape = prior_model.dims
+seq_len = in_shape[2]
 
 id = "protein_mdgen_"+ r_str +"_len_" + str(seq_len)
 
@@ -100,39 +98,38 @@ if not args.replay_buffer == 'none':
     replay_buffer = ReplayBuffer(rb_size=10000, rb_sample_strategy=args.replay_buffer)
 
 
-if args.sampler_time == 0.:
+rtb_model = protein_rtb.ProteinRTBModel(
+    device=device,
+    reward_model=reward_model,
+    prior_model=prior_model,
+    in_shape=in_shape,
+    reward_args=reward_args,
+    id=id,
+    model_save_path=args.save_path,
+    langevin=args.langevin,
+    inference_type=args.inference,
+    tb=args.tb,
+    load_ckpt=args.load_ckpt,
+    load_ckpt_path=args.load_path,
+    entity=args.entity,
+    diffusion_steps=args.diffusion_steps,
+    beta_start=args.beta_start,
+    beta_end=args.beta_end,
+    loss_batch_size=args.loss_batch_size,
+    replay_buffer=replay_buffer
+)
 
-    rtb_model = protein_rtb.ProteinRTBModel(
-        device=device,
-        reward_model=reward_model,
-        prior_model=prior_model,
-        in_shape=in_shape,
-        reward_args=reward_args,
-        id=id,
-        model_save_path=args.save_path,
-        langevin=args.langevin,
-        inference_type=args.inference,
-        tb=args.tb,
-        load_ckpt=args.load_ckpt,
-        load_ckpt_path=args.load_path,
-        entity=args.entity,
-        diffusion_steps=args.diffusion_steps,
-        beta_start=args.beta_start,
-        beta_end=args.beta_end,
-        loss_batch_size=args.loss_batch_size,
-        replay_buffer=replay_buffer
+if args.langevin:
+    rtb_model.pretrain_trainable_reward(
+        n_iters=20,
+        batch_size=args.batch_size,
+        learning_rate=args.lr,
+        wandb_track=False
     )
 
-    if args.langevin:
-        rtb_model.pretrain_trainable_reward(n_iters = 20, batch_size = args.batch_size, learning_rate = args.lr, wandb_track = False) #args.wandb_track)
-
-    rtb_model.finetune(shape=(args.batch_size, *in_shape), n_iters = args.n_iters,
-                       wandb_track=args.wandb_track, learning_rate=args.lr,
-                       clip = args.clip,
-                       prior_sample_prob=args.prior_sample_prob,
-                       replay_buffer_prob=args.replay_buffer_prob,
-                       anneal=args.anneal, anneal_steps=args.anneal_steps)
-
-    #rtb_model.denoising_score_matching_unif(n_iters = 10000, learning_rate = 5e-5, clip=0.1, wandb_track = True)
-else:
-    print("Not supported")
+rtb_model.finetune(shape=(args.batch_size, *in_shape), n_iters = args.n_iters,
+                   wandb_track=args.wandb_track, learning_rate=args.lr,
+                   clip = args.clip,
+                   prior_sample_prob=args.prior_sample_prob,
+                   replay_buffer_prob=args.replay_buffer_prob,
+                   anneal=args.anneal, anneal_steps=args.anneal_steps)
