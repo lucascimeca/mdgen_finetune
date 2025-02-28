@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 import random
 
-from sde import VPSDE, DDPM
+from rtb_utils.sde import VPSDE, DDPM
 import rtb_utils as utils
 
 

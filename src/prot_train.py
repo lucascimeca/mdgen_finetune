@@ -78,7 +78,7 @@ reward_args = []
 
 prior_model = MDGenSimulator(
     peptide='FLRH',
-    sim_ckpt='pretrained/forward_sim.ckpt',
+    sim_ckpt='../pretrained/forward_sim.ckpt',
     data_dir='../data/4AA_data',
     split='splits/4AA_test.csv',
     num_rollouts=1,
