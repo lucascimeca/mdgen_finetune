@@ -23,6 +23,7 @@ from mdgen.utils import atom14_to_pdb
 import pandas as pd
 
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 os.makedirs(args.out_dir, exist_ok=True)
@@ -83,9 +84,7 @@ def rollout(model, batch):
     if args.no_frames:
         new_batch['atom37'] = torch.from_numpy(
             atom14_to_atom37(atom14[:,-1].cpu(), batch['seqres'][0].cpu())
-        ).cuda()[:,None].float()
-        
-        
+        ).to(device)[:,None].float()
         
     else:
         frames = atom14_to_frames(atom14[:,-1])
@@ -93,7 +92,7 @@ def rollout(model, batch):
         new_batch['rots'] = frames._rots._rot_mats[None]
         atom37 = atom14_to_atom37(atom14[0,-1].cpu(), batch['seqres'][0].cpu())
         torsions, _ = atom37_to_torsions(atom37, batch['seqres'][0].cpu())
-        new_batch['torsions'] = torsions[None, None].cuda()
+        new_batch['torsions'] = torsions[None, None].to(device)
 
     return atom14, new_batch
     
@@ -103,7 +102,7 @@ def do(model, name, seqres):
     item = get_batch(name, seqres, num_frames = model.args.num_frames)
     batch = next(iter(torch.utils.data.DataLoader([item])))
 
-    batch = tensor_tree_map(lambda x: x.cuda(), batch)  
+    batch = tensor_tree_map(lambda x: x.to(device), batch)  
     
     all_atom14 = []
     start = time.time()
@@ -127,14 +126,14 @@ def do(model, name, seqres):
 @torch.no_grad()
 def main():
     model = NewMDGenWrapper.load_from_checkpoint(args.sim_ckpt)
-    model.eval().to('cuda')
-    
+    model.eval().to(device)
     
     df = pd.read_csv(args.split, index_col='name')
     for name in df.index:
         if args.pdb_id and name not in args.pdb_id:
             continue
         do(model, name, df.seqres[name])
+        break
         
 
 main()

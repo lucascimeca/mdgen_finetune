@@ -402,7 +402,7 @@ class NewMDGenWrapper(Wrapper):
         self.last_log_time = time.time()
         return loss.mean()
 
-    def inference(self, batch):
+    def inference(self, batch, zs0=None):
 
         prep = self.prep_batch(batch)
 
@@ -430,13 +430,16 @@ class NewMDGenWrapper(Wrapper):
                                                batch['seqres'][:, None].expand(B, T, L))
             return atom14, aa_out
 
-        if self.args.design:
-            zs_continuous = torch.randn(B, T, L, self.latent_dim - 20, device=latents.device)
-            zs_discrete = torch.distributions.Dirichlet(torch.ones(B, L, 20, device=latents.device)).sample()
-            zs_discrete = zs_discrete[:, None].expand(-1, T, -1, -1)
-            zs = torch.cat([zs_continuous, zs_discrete], -1)
+        if zs0 is not None:
+            zs = zs0
         else:
-            zs = torch.randn(B, T, L, self.latent_dim, device=self.device)
+            if self.args.design:
+                zs_continuous = torch.randn(B, T, L, self.latent_dim - 20, device=latents.device)
+                zs_discrete = torch.distributions.Dirichlet(torch.ones(B, L, 20, device=latents.device)).sample()
+                zs_discrete = zs_discrete[:, None].expand(-1, T, -1, -1)
+                zs = torch.cat([zs_continuous, zs_discrete], -1)
+            else:
+                zs = torch.randn(B, T, L, self.latent_dim, device=self.device)
 
         sample_fn = self.transport_sampler.sample_ode(sampling_method=self.args.sampling_method)
         # num_steps=self.args.inference_steps)  # default to ode

@@ -2,7 +2,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--split', type=str, default='splits/atlas.csv')
-parser.add_argument('--sim_dir', type=str, default='/data/cb/scratch/datasets/atlas')
+parser.add_argument('--sim_dir', type=str, default='/atlas')
 parser.add_argument('--outdir', type=str, default='./data_atlas')
 parser.add_argument('--num_workers', type=int, default=1)
 parser.add_argument('--suffix', type=str, default='')
@@ -71,7 +71,7 @@ if args.atlas:
             np.save(f'{args.outdir}/{name}_R{i}{args.suffix}.npy', arr[::args.stride])
 else:
     def do_job(name):
-        traj = mdtraj.load(f'{args.atlas_dir}/{name}/{name}.xtc', top=f'{args.atlas_dir}/{name}/{name}.pdb')
+        traj = mdtraj.load(f'{args.sim_dir}/{name}/{name}.xtc', top=f'{args.sim_dir}/{name}/{name}.pdb')
         traj.superpose(traj)
         arr = traj_to_atom14(traj)
         np.save(f'{args.outdir}/{name}{args.suffix}.npy', arr[::args.stride])
