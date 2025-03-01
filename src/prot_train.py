@@ -55,6 +55,7 @@ parser.add_argument('--clip', default=0.1, type=float, help='Gradient clipping v
 
 args = parser.parse_args()
 
+
 # set seeds
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -80,7 +81,7 @@ prior_model = MDGenSimulator(
     peptide='FLRH',
     sim_ckpt='../pretrained/forward_sim.ckpt',
     data_dir='../data/4AA_data',
-    split='splits/4AA_test.csv',
+    split='../splits/4AA_test.csv',
     num_rollouts=1,
     num_frames=args.batch_size,
     xtc=True,
@@ -129,7 +130,7 @@ if args.langevin:
 
 rtb_model.finetune(shape=(args.batch_size, *in_shape), n_iters = args.n_iters,
                    wandb_track=args.wandb_track, learning_rate=args.lr,
-                   clip = args.clip,
+                   clip=args.clip,
                    prior_sample_prob=args.prior_sample_prob,
                    replay_buffer_prob=args.replay_buffer_prob,
                    anneal=args.anneal, anneal_steps=args.anneal_steps)

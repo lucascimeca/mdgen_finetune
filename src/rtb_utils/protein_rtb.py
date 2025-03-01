@@ -35,8 +35,8 @@ class ProteinRTBModel(nn.Module):
                  beta_start=1.0,
                  beta_end=10.0,
                  loss_batch_size=64,
-                 replay_buffer=None,
-                 load_pretrained_checkpoint_path="~/scratch/CNF_RTB_ckpts/DSM_unif_unet_typeprotein_foldflow_TEMP_classifier_r_len_64/checkpoint_13100.pth"):
+                 replay_buffer=None
+                 ):
         super().__init__()
 
         self.device = device
@@ -65,11 +65,11 @@ class ProteinRTBModel(nn.Module):
                                                        torch.tensor(1.).to(self.device))
         self.tb = tb
 
-        # shape as (C, H, W), then reshape to in-shape (64, 7) when passing to prior model
-        self.gfn_shape = (7, 8, 8)  # 10, 10)
-
         # Posterior noise model
         self.logZ = torch.nn.Parameter(torch.tensor(0.).to(self.device))
+
+        # shape as (C, H, W), then reshape to in-shape (64, 7) when passing to prior model
+        self.gfn_shape = (21, 2, 2)  # 10, 10)
 
         self.mlp_dim = self.gfn_shape[0] * self.gfn_shape[1] * self.gfn_shape[2]
 
@@ -79,7 +79,7 @@ class ProteinRTBModel(nn.Module):
             dim=self.gfn_shape,
             num_res_blocks=2,
             num_channels=128,
-            channel_mult=[1, 2, 2, 2],
+            channel_mult=(2, 2),
             num_heads=4,
             num_head_channels=64,
             attention_resolutions="16",
@@ -88,10 +88,10 @@ class ProteinRTBModel(nn.Module):
 
         # for DSM pretraining 
 
-        self.load_pretrained_ckpt_path = os.path.expanduser(load_pretrained_checkpoint_path)
-        checkpoint = torch.load(self.load_pretrained_ckpt_path)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        print("DSM model loaded from: ", self.load_pretrained_ckpt_path)
+        # self.load_pretrained_ckpt_path = os.path.expanduser(load_pretrained_checkpoint_path)
+        # checkpoint = torch.load(self.load_pretrained_ckpt_path)
+        # self.model.load_state_dict(checkpoint['model_state_dict'])
+        # print("DSM model loaded from: ", self.load_pretrained_ckpt_path)
 
         # pretrained frozen model 
 
@@ -99,20 +99,12 @@ class ProteinRTBModel(nn.Module):
             dim=self.gfn_shape,
             num_res_blocks=2,
             num_channels=128,
-            channel_mult=[1, 2, 2, 2],
+            channel_mult=(2, 2),
             num_heads=4,
             num_head_channels=64,
             attention_resolutions="16",
             dropout=0.0,
         ).to(self.device)
-
-        self.load_pretrained_ckpt_path = os.path.expanduser(load_pretrained_checkpoint_path)
-        checkpoint = torch.load(self.load_pretrained_ckpt_path)
-        self.ref_model.load_state_dict(checkpoint['model_state_dict'])
-        print("Reference DSM model loaded from: ", self.load_pretrained_ckpt_path)
-
-        self.ref_model.eval()
-        self.ref_model.requires_grad_ = False
 
         self.ref_proc = True  # False
 
@@ -120,16 +112,6 @@ class ProteinRTBModel(nn.Module):
         self.prior_model = prior_model
 
         self.reward_model = reward_model
-
-        if langevin:
-            self.num_classes = 10
-
-            self.trainable_reward = reward_models.TrainableReward_1StepFlow(in_shape=self.in_shape,
-                                                                            prior_model_net=self.prior_model.prior_model,
-                                                                            device=self.device)
-            self.cls_optimizer = torch.optim.Adam(self.trainable_reward.parameters(), lr=5e-5)
-        else:
-            self.trainable_reward = None
 
         self.langevin = langevin
 
@@ -146,11 +128,11 @@ class ProteinRTBModel(nn.Module):
         # print("input x.shape: ", x.shape)
 
         # reshape x to gfn_shape
-        x = x.permute(0, 2, 1).reshape(-1, *self.gfn_shape)
+        x = x.squeeze().permute(0, 2, 1).reshape(x.shape[0], *self.gfn_shape)
 
         model_out = self.model(t, x)
         # reshape to in_shape [1, 64, 7]
-        model_out_shaped = model_out.permute(0, 3, 1, 2).reshape(-1, *self.in_shape)
+        model_out_shaped = model_out.permute(0, 3, 1, 2).reshape(x.shape[0], *self.in_shape)
         # print("model out shape")
 
         return model_out_shaped
@@ -161,13 +143,13 @@ class ProteinRTBModel(nn.Module):
         # print("input x.shape: ", x.shape)
 
         # reshape x to gfn_shape
-        x = x.permute(0, 2, 1).reshape(-1, *self.gfn_shape)
+        x = x.squeeze().permute(0, 2, 1).reshape(x.shape[0], *self.gfn_shape)
 
         with torch.no_grad():
             model_out = self.ref_model(t, x)
 
         # reshape to in_shape [1, 64, 7]
-        model_out_shaped = model_out.permute(0, 3, 1, 2).reshape(-1, *self.in_shape)
+        model_out_shaped = model_out.permute(0, 3, 1, 2).reshape(x.shape[0], *self.in_shape)
         # print("model out shape")
 
         return model_out_shaped
@@ -321,10 +303,9 @@ class ProteinRTBModel(nn.Module):
     def log_reward(self, x, from_prior=False, return_img=False):
         with torch.no_grad():
             if not from_prior:
-                x = self.prior_model.normalize_rigids(x, scale_trans=(not self.ref_proc))
-
-            img = self.prior_model(x)
-
+                img = self.prior_model.sample(zs0=x)
+            else:
+                img = self.prior_model.sample()
             log_r = self.reward_model(img, tmp_dir=self.tmp_dir).to(self.device)
         if return_img:
             return log_r, img
@@ -563,7 +544,7 @@ class ProteinRTBModel(nn.Module):
         return
 
     def finetune(self, shape, n_iters=100000, learning_rate=5e-5, clip=0.1, wandb_track=False, prior_sample_prob=0.0,
-                 replay_buffer_prob=0.0, anneal=False, anneal_steps=15000):
+                 replay_buffer_prob=0.0, anneal=False, anneal_steps=15000, num_test_samples=1):
         B, *D = shape
 
         param_list = [{'params': self.model.parameters()}]
@@ -604,21 +585,21 @@ class ProteinRTBModel(nn.Module):
                 "load ckpt path": self.load_ckpt_path
             }
             wandb.config.update(hyperparams)
-            with torch.no_grad():
-                if hasattr(self.reward_model, 'protein_type'):
-                    x = self.prior_model.sample_prior(batch_size=num_test_samples, sample_length=self.in_shape[0])
-                    print("x: ", x)
-                    # print("prior sample x shape: ", x.shape)
-                else:
-                    x = torch.randn(num_test_samples, *self.in_shape, device=self.device)
-                img = self.prior_model(x)
-                prior_reward = self.reward_model(img, tmp_dir=self.tmp_dir)
-            if not protein_type:
-                wandb.log({"prior_samples": [wandb.Image(img[k], caption=prior_reward[k]) for k in range(len(img))]})
-            else:
-                imgs_pil = self.reward_model.get_prot_image(img, tmp_dir=self.tmp_dir)
-                wandb.log({"prior_samples": [wandb.Image(imgs_pil[k], caption=prior_reward[k]) for k in
-                                             range(len(imgs_pil))]})
+            # with torch.no_grad():
+            #     if hasattr(self.reward_model, 'protein_type'):
+            #         x = self.prior_model.sample()
+            #         print("x: ", x)
+            #         # print("prior sample x shape: ", x.shape)
+            #     else:
+            #         x = torch.randn(num_test_samples, *self.in_shape, device=self.device)
+            #     img = self.prior_model(x)
+            #     prior_reward = self.reward_model(img, tmp_dir=self.tmp_dir)
+            # if not protein_type:
+            #     wandb.log({"prior_samples": [wandb.Image(img[k], caption=prior_reward[k]) for k in range(len(img))]})
+            # else:
+            #     imgs_pil = self.reward_model.get_prot_image(img, tmp_dir=self.tmp_dir)
+            #     wandb.log({"prior_samples": [wandb.Image(imgs_pil[k], caption=prior_reward[k]) for k in
+            #                                  range(len(imgs_pil))]})
         for it in range(load_it, n_iters):
             prior_traj = False
             rb_traj = False
@@ -678,23 +659,21 @@ class ProteinRTBModel(nn.Module):
 
                             # x = self.prior_model.normalize_rigids(logs['x_mean_posterior'],
                             #                                       scale_trans=(not self.ref_proc))
-                            conformation = self.prior_model.sample(zs0=x)
+                            conformation = self.prior_model.sample(zs0=logs['x_mean_posterior'])
                             post_reward = self.reward_model(conformation, tmp_dir=self.tmp_dir)
 
-                            if self.langevin:
-                                trained_reward = self.trainable_reward(x).log_softmax(dim=-1)
-
-                            else:
-                                if hasattr(self.reward_model, 'classifier_type'):
-                                    logr_, pred_all, acc = self.reward_model.pred_all_acc(img)
-                                else:
-                                    acc = -1.0
-
-                                imgs_pil = self.reward_model.get_prot_image(img, tmp_dir=self.tmp_dir)
-                                wandb.log({"loss": loss.item(), "logZ": self.logZ.detach().cpu().numpy(),
-                                           "log_r": logr.item(), "gnorm": gnorm, "epoch": it,
-                                           "posterior_samples": [wandb.Image(imgs_pil[k], caption=post_reward[k]) for k
-                                                                 in range(len(imgs_pil))], "acc": acc})
+                            # if self.langevin:
+                            #     trained_reward = self.trainable_reward(logs['x_mean_posterior']).log_softmax(dim=-1)
+                            #
+                            # else:
+                            #     if hasattr(self.reward_model, 'classifier_type'):
+                            #         logr_, pred_all, acc = self.reward_model.pred_all_acc(img)
+                            #     else:
+                            #         acc = -1.0
+                            #
+                            #     imgs_pil = self.reward_model.get_prot_image(img, tmp_dir=self.tmp_dir)
+                            wandb.log({"loss": loss.item(), "logZ": self.logZ.detach().cpu().numpy(),
+                                       "log_r": logr.item(), "gnorm": gnorm, "epoch": it})
 
                             # save model and optimizer state
                             self.save_checkpoint(self.model, optimizer, it, run_name)
@@ -1006,7 +985,7 @@ class ProteinRTBModel(nn.Module):
 
         if backward:
             x = x_1
-            timesteps = np.flip(timesteps)
+            # timesteps = np.flip(timesteps)
             t = torch.zeros(B).to(self.device) + self.sde.epsilon
         else:
             x = self.sde.prior(D).sample([B]).to(self.device)

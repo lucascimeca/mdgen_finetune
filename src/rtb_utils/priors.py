@@ -75,7 +75,7 @@ class MDGenSimulator:
         item = self._get_batch()
         self.batch = next(iter(torch.utils.data.DataLoader([item])))
         self.batch = tensor_tree_map(lambda x: x.to(self.device), self.batch)
-        self.dims = self.model.get_dims(self, self.batch)
+        self.dims = self.model.get_dims(self.batch)
 
     def _get_batch(self):
         """
