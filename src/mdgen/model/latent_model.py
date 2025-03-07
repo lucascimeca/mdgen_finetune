@@ -225,6 +225,10 @@ class LatentMDGenModel(nn.Module):
             x_cond_mask = x_cond_mask[:, :1]
             mask = mask[:, :1]
 
+        # addition to work with batch
+        mask = mask.repeat(x.shape[0], 1, 1)
+        #######
+
         if self.args.design:
             x_d = x[..., -20:].mean(1)
         else:
@@ -238,7 +242,7 @@ class LatentMDGenModel(nn.Module):
             x = x + self.time_embed[:, :, None]
 
         if x_cond is not None:
-            x = x + self.cond_to_emb(x_cond).permute(1, 0, 2, 3) + self.mask_to_emb(x_cond_mask).permute(1, 0, 2, 3)  # token has cond g, tau
+            x = x + self.cond_to_emb(x_cond) + self.mask_to_emb(x_cond_mask)  # token has cond g, tau
 
         t = self.t_embedder(t * self.args.time_multiplier)[:, None]
 

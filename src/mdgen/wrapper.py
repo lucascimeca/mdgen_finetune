@@ -430,6 +430,8 @@ class NewMDGenWrapper(Wrapper):
         #     offsets = get_offsets(rigids[:, 0:1], rigids)
         #     torsions = batch['torsions'].view(B, T, L, 14)
         # else:
+
+        B = zs0.shape[0]
         if self.args.dynamic_mpnn or self.args.mpnn:
             x1 = prep['latents']
             x_d = torch.zeros(x1.shape[0], x1.shape[1], x1.shape[2], 20, device=self.device)
@@ -458,7 +460,7 @@ class NewMDGenWrapper(Wrapper):
         samples = sample_fn(
             zs,
             partial(self.model.forward_inference, **prep['model_kwargs'])
-        )[-1].permute(1, 0, 2, 3)
+        )[-1]
 
         if self.args.no_frames:
             atom14 = atom37_to_atom14(

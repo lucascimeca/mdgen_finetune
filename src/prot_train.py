@@ -28,6 +28,7 @@ parser.add_argument('--exp_name', default="test", type=str, help='Experiment nam
 parser.add_argument('--tb', default=False, type=strtobool, help='Whether to use tb (vs rtb)')
 parser.add_argument('--n_iters', default=50000, type=int, metavar='N', help='Number of training iterations')
 parser.add_argument('-bs', '--batch_size', type=int, default=64, help="Training Batch Size.")
+parser.add_argument('--num_test_samples', type=int, default=64, help="Test Batch Size.")
 parser.add_argument('--loss_batch_size', type=int, default=-1, help="Batched RTB loss batch size")
 parser.add_argument('--lr', '--learning_rate', default=5e-5, type=float, help='Initial learning rate.')
 parser.add_argument('--peptide', type=str, default='FLRH', help='Peptide sequence.')
@@ -87,7 +88,8 @@ prior_model = MDGenSimulator(
     data_dir=f'{args.data_path}4AA_data',
     split=f'{args.splits_path}4AA_test.csv',
     num_rollouts=1,
-    num_frames=args.batch_size,
+    num_frames=1,
+    retain=64,
     xtc=True,
     out_dir=args.save_path,
     suffix='_i100'
@@ -139,4 +141,6 @@ rtb_model.finetune(shape=(args.batch_size, *in_shape),
                    clip=args.clip,
                    prior_sample_prob=args.prior_sample_prob,
                    replay_buffer_prob=args.replay_buffer_prob,
-                   anneal=args.anneal, anneal_steps=args.anneal_steps)
+                   num_test_samples=args.num_test_samples,
+                   anneal=args.anneal,
+                   anneal_steps=args.anneal_steps)

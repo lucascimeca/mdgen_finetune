@@ -1,9 +1,13 @@
+import glob
+import os
 from time import time
 
 from openmm.app import PDBFile, Modeller, Simulation, PME, HBonds, Topology, ForceField
 from openmm.app.element import Element
 from openmm.unit import nanometer, bar, kelvin, picosecond, femtosecond
 from openmm import LangevinMiddleIntegrator, Platform, Vec3, MonteCarloBarostat
+from tqdm import tqdm
+
 from src.mdgen.utils import atom14_to_pdb
 
 from src.mdgen.geometry import atom14_to_atom37
@@ -84,7 +88,8 @@ class Amber14Reward(nn.Module):
 
         # Depending on how your topology is ordered, you might need to reshape or re-order the positions.
         # Here, we assume that the full set of positions for the protein is a flattened (T*L, 3) array.
-        for i in range(len(traj.xyz)):
+        print("computing energies")
+        for i in tqdm(range(len(traj.xyz)), total=len(traj.xyz)):
 
             modeller = Modeller(pdb.topology, traj.xyz[i])
 
@@ -118,10 +123,14 @@ class Amber14Reward(nn.Module):
             state = simulation.context.getState(getEnergy=True)
             energy = state.getPotentialEnergy()
             energies.append(energy._value)
+        print("removing pdb files")
+        for f in glob.glob(os.path.join(tmp_dir, "*.pdb")) + glob.glob(os.path.join(tmp_dir, "*.xtc")):
+            os.remove(f)
 
         t1 = time()
         print(f"elapsed {t1 - t0}")
-        return torch.FloatTensor(energies)
+
+        return -torch.FloatTensor(energies)
 
     # def forward(self, sequence, data_path, tmp_dir='../samples/'):
     #     t0 = time()

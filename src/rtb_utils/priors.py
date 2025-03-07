@@ -26,6 +26,7 @@ class MDGenSimulator:
                  pdb_id=None,
                  num_frames=1,
                  num_rollouts=100,
+                 retain=300,
                  no_frames=False,
                  tps=False,
                  xtc=False,
@@ -75,18 +76,16 @@ class MDGenSimulator:
         # Load the split file.
         self.df = pd.read_csv(self.split, index_col='name')
 
-        item = self._get_batch()
+        item = self._get_batch(retain=retain)
         self.batch = next(iter(torch.utils.data.DataLoader([item])))
         self.batch = tensor_tree_map(lambda x: x.to(self.device), self.batch)
         self.dims = self.model.get_dims(self.batch)
 
-    def _get_batch(self):
+        self.target_dist = None
+
+    def _get_batch(self, retain=300):
         """
         Prepare a batch for simulation.
-
-        Parameters:
-            name (str): The simulation identifier.
-            seqres (str): Residue sequence string.
 
         Returns:
             dict: A batch dictionary.
@@ -94,8 +93,12 @@ class MDGenSimulator:
         file_path = os.path.join(self.data_dir, f"{self.peptide}{self.suffix}.npy")
         arr = np.lib.format.open_memmap(file_path, 'r')
 
+        idxes = np.random.randint(0, len(arr), size=retain)
         if not self.tps:  # if tps flag is not set, use only the first frame
+            self.batch_arr = np.copy(arr[idxes]).astype(np.float32)
             arr = np.copy(arr[0:1]).astype(np.float32)
+        else:
+            self.batch_arr = arr
 
         frames = atom14_to_frames(torch.from_numpy(arr))
         seqres_tensor = torch.tensor([restype_order[c] for c in self.peptide])
@@ -161,34 +164,11 @@ class MDGenSimulator:
 
         return atom14, new_batch
 
-    def sample(self, zs0=None):
-        """
-        Run one simulation and generate the corresponding pdb file.
+    def fix_and_save_pdbs(self, frames):
 
-        Parameters:
-            name (str, optional): The simulation identifier. If not provided, the first valid
-                                  simulation from the split file is used.
-        """
-        """
-          Run the simulation for a given name and residue sequence, and write output files.
-
-          Parameters:
-              name (str): Name of peptide.
-              seqres (str): Residue sequence string.
-          """
-
-        all_atom14 = []
-        start_time = time.time()
-        for _ in tqdm.trange(self.num_rollouts, desc=f"Rollouts for {self.peptide}"):
-            atom14, batch = self._rollout(self.batch, zs0=zs0)
-            all_atom14.append(atom14)
-        elapsed = time.time() - start_time
-        print(f"Simulation for {self.peptide} took {elapsed:.2f} seconds.")
-
-        all_atom14 = torch.cat(all_atom14, 1)
-        for i in range(len(all_atom14[0])):
+        for i in range(len(frames)):
             pdb_path = os.path.join(self.out_dir, f"{self.peptide}_{i}.pdb")
-            atom14_to_pdb(all_atom14[0][i].unsqueeze(0).cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), pdb_path)
+            atom14_to_pdb(frames[i].unsqueeze(0).cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), pdb_path)
 
             fixer = PDBFixer(filename=pdb_path)
             fixer.missingResidues = {}
@@ -214,4 +194,32 @@ class MDGenSimulator:
             xtc_path = os.path.join(self.out_dir, f"{self.peptide}.xtc")
             traj.save(xtc_path)
 
-        return (all_atom14[0].cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), pdb_path)
+    def sample(self, zs0=None):
+        """
+        Run one simulation and generate the corresponding pdb file.
+
+        Parameters:
+            name (str, optional): The simulation identifier. If not provided, the first valid
+                                  simulation from the split file is used.
+        """
+        """
+          Run the simulation for a given name and residue sequence, and write output files.
+
+          Parameters:
+              name (str): Name of peptide.
+              seqres (str): Residue sequence string.
+          """
+
+        all_atom14 = []
+        start_time = time.time()
+        for _ in tqdm.trange(self.num_rollouts, desc=f"Rollouts for {self.peptide}"):
+            atom14, batch = self._rollout(self.batch, zs0=zs0)
+            all_atom14.append(atom14)
+        elapsed = time.time() - start_time
+        print(f"Simulation for {self.peptide} took {elapsed:.2f} seconds.")
+
+        all_atom14 = torch.cat(all_atom14, 1)
+
+        self.fix_and_save_pdbs(frames=all_atom14.squeeze(1))
+
+        return all_atom14[0].cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), self.out_dir

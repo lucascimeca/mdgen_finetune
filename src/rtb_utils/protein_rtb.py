@@ -1,5 +1,7 @@
 import os
 
+from rtb_utils.plot_utils import compare_distributions
+
 os.environ['PYMOL_QUIET'] = '1'
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 
@@ -410,7 +412,7 @@ class ProteinRTBModel(nn.Module):
                 batch_size=B
             )
 
-        return rtb_loss.detach().mean(), logr_x_prime.mean()
+        return rtb_loss.detach(), logr_x_prime
 
     def dsm_loss(self, x0, t):
         B = x0.shape[0]
@@ -646,11 +648,27 @@ class ProteinRTBModel(nn.Module):
                     self.update_trainable_reward(x_1)
 
                 if wandb_track:
+
+                    # compute distribution change
+                    if self.prior_model.target_dist is None:
+                        print("data energy distribution has yet to be computed. Computing...")
+                        # save all the frames from the actual data
+                        self.prior_model.fix_and_save_pdbs(torch.FloatTensor(self.prior_model.batch_arr))
+                        # save all the frames from the actual data
+                        self.prior_model.target_dist = self.reward_model(self.prior_model.peptide,
+                                                        data_path=self.config.data_path,
+                                                        tmp_dir=self.prior_model.out_dir)
+                        print("Done!")
+
                     if not it % 100 == 0:
-                        wandb.log({"loss": loss.item(), "logZ": self.logZ.detach().cpu().numpy(), "log_r": logr.item(),
-                                   "gnorm": gnorm, "epoch": it})
+                        wandb.log({"loss": loss.mean().item(),
+                                   "logZ": self.logZ.detach().cpu().numpy(),
+                                   "log_r": logr.mean().item(),
+                                   "gnorm": gnorm,
+                                   "epoch": it})
                     else:
                         with torch.no_grad():
+
                             if self.sde_type == 'vpsde' and self.ref_proc:
                                 logs = self.forward_ref_proc(
                                     shape=(num_test_samples, *D),
@@ -669,21 +687,22 @@ class ProteinRTBModel(nn.Module):
 
                             # x = self.prior_model.normalize_rigids(logs['x_mean_posterior'],
                             #                                       scale_trans=(not self.ref_proc))
-                            conformation = self.prior_model.sample(zs0=logs['x_mean_posterior'])
-                            post_reward = self.reward_model(conformation, tmp_dir=self.tmp_dir)
+                            self.prior_model.sample(zs0=logs['x_mean_posterior'])  # loads the tmp folder with proteins
+                            post_reward = self.reward_model(self.prior_model.peptide,
+                                                            data_path=self.config.data_path,
+                                                            tmp_dir=self.prior_model.out_dir)
 
-                            # if self.langevin:
-                            #     trained_reward = self.trainable_reward(logs['x_mean_posterior']).log_softmax(dim=-1)
-                            #
-                            # else:
-                            #     if hasattr(self.reward_model, 'classifier_type'):
-                            #         logr_, pred_all, acc = self.reward_model.pred_all_acc(img)
-                            #     else:
-                            #         acc = -1.0
-                            #
-                            #     imgs_pil = self.reward_model.get_prot_image(img, tmp_dir=self.tmp_dir)
-                            wandb.log({"loss": loss.item(), "logZ": self.logZ.detach().cpu().numpy(),
-                                       "log_r": logr.item(), "gnorm": gnorm, "epoch": it})
+                            logs = {"loss": loss.mean().item(),
+                                    "logZ": self.logZ.detach().cpu().numpy(),
+                                    'post_reward': post_reward,
+                                    "log_r": logr.mean().item(),
+                                    "gnorm": gnorm,
+                                    "epoch": it}
+
+                            dist_logs = compare_distributions(self.prior_model.target_dist.detach().cpu(), post_reward.detach().cpu())
+                            logs.update(dist_logs)
+
+                            wandb.log(logs)
 
                             # save model and optimizer state
                             self.save_checkpoint(self.model, optimizer, it, run_name)
