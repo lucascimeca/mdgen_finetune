@@ -1,3 +1,13 @@
+import glob
+
+from openmm.app import PDBFile
+from pdbfixer import PDBFixer
+from src.mdgen.geometry import atom14_to_frames, atom14_to_atom37, atom37_to_torsions
+from src.mdgen.residue_constants import restype_order, restype_atom37_mask
+from src.mdgen.tensor_utils import tensor_tree_map
+from src.mdgen.wrapper import NewMDGenWrapper
+from src.mdgen.utils import atom14_to_pdb
+
 import os
 import time
 import torch
@@ -5,13 +15,6 @@ import mdtraj
 import tqdm
 import numpy as np
 import pandas as pd
-
-from src.mdgen.geometry import atom14_to_frames, atom14_to_atom37, atom37_to_torsions
-from src.mdgen.residue_constants import restype_order, restype_atom37_mask
-from src.mdgen.tensor_utils import tensor_tree_map
-from src.mdgen.wrapper import NewMDGenWrapper
-from src.mdgen.utils import atom14_to_pdb
-
 
 class MDGenSimulator:
     def __init__(self,
@@ -21,7 +24,7 @@ class MDGenSimulator:
                  split='splits/4AA_test.csv',
                  suffix='',
                  pdb_id=None,
-                 num_frames=1000,
+                 num_frames=1,
                  num_rollouts=100,
                  no_frames=False,
                  tps=False,
@@ -158,7 +161,6 @@ class MDGenSimulator:
 
         return atom14, new_batch
 
-
     def sample(self, zs0=None):
         """
         Run one simulation and generate the corresponding pdb file.
@@ -184,13 +186,32 @@ class MDGenSimulator:
         print(f"Simulation for {self.peptide} took {elapsed:.2f} seconds.")
 
         all_atom14 = torch.cat(all_atom14, 1)
-        pdb_path = os.path.join(self.out_dir, f"{self.peptide}.pdb")
-        atom14_to_pdb(all_atom14[0].cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), pdb_path)
+        for i in range(len(all_atom14[0])):
+            pdb_path = os.path.join(self.out_dir, f"{self.peptide}_{i}.pdb")
+            atom14_to_pdb(all_atom14[0][i].unsqueeze(0).cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), pdb_path)
 
+            fixer = PDBFixer(filename=pdb_path)
+            fixer.missingResidues = {}
+            fixer.findMissingAtoms()
+            fixer.addMissingAtoms()
+
+            with open(pdb_path, 'w') as f:
+                PDBFile.writeFile(fixer.topology, fixer.positions, f, True)
+
+        # Now, if xtc conversion is requested, load all individual pdb files and join them.
         if self.xtc:
-            traj = mdtraj.load(pdb_path)
+            # Use glob to find all pdb files for this peptide.
+            pdb_paths = sorted(glob.glob(os.path.join(self.out_dir, f"{self.peptide}_*.pdb")))
+            # Load each pdb file into a trajectory.
+            traj_list = [mdtraj.load(p) for p in pdb_paths]
+            # Join the trajectories into a single trajectory.
+            traj = mdtraj.join(traj_list)
+
+            # Superpose the trajectory.
             traj.superpose(traj)
+
+            # Save the trajectory as an xtc file.
             xtc_path = os.path.join(self.out_dir, f"{self.peptide}.xtc")
             traj.save(xtc_path)
-            # Overwrite the pdb with the first frame after superposition
-            traj[0].save(pdb_path)
+
+        return (all_atom14[0].cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), pdb_path)

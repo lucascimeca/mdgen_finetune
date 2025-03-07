@@ -93,7 +93,7 @@ def create_full_prot(
 def prots_to_pdb(prots):
     ss = ''
     for i, prot in enumerate(prots):
-        ss += f'MODEL {i}\n'
+        ss += f'MODEL      {i}\n'
         prot = protein.to_pdb(prot)
         ss += '\n'.join(prot.split('\n')[2:-3])
         ss += '\nENDMDL\n'

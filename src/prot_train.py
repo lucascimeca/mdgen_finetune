@@ -45,13 +45,17 @@ parser.add_argument('--anneal_steps', default=15000, type=int, help="Number of s
 
 parser.add_argument('--save_path', default='~/scratch/CNF_RTB_ckpts/', type=str, help='Path to save model checkpoints')
 parser.add_argument('--load_ckpt', default=False, type=strtobool, help='Whether to load checkpoint')
-parser.add_argument('--load_path', default=None, type=str, help='Path to load model checkpoint')
+parser.add_argument('--load_path', default='../pretrained/', type=str, help='Path to load model checkpoint')
 
 parser.add_argument('--langevin', default=False, type=strtobool, help="Whether to use Langevin dynamics for sampling")
 
 parser.add_argument('--inference', default='vpsde', type=str, help='Inference method for prior', choices=['vpsde', 'ddpm'])
 parser.add_argument('--seed', default=0, type=int, help='Random seed for training')
 parser.add_argument('--clip', default=0.1, type=float, help='Gradient clipping value')
+
+parser.add_argument('--data_path', default='~/scratch/mdflow/data/', type=str, help='Path to save model checkpoints')
+parser.add_argument('--splits_path', default='~/scratch/mdflow/splits/', type=str, help='Path to save model checkpoints')
+
 
 args = parser.parse_args()
 
@@ -78,18 +82,18 @@ r_str = "ss_div_seed_" + str(args.seed)
 reward_args = []
 
 prior_model = MDGenSimulator(
-    peptide='FLRH',
-    sim_ckpt='../pretrained/forward_sim.ckpt',
-    data_dir='../data/4AA_data',
-    split='../splits/4AA_test.csv',
+    peptide=args.peptide,
+    sim_ckpt=f'{args.load_path}forward_sim.ckpt',
+    data_dir=f'{args.data_path}4AA_data',
+    split=f'{args.splits_path}4AA_test.csv',
     num_rollouts=1,
     num_frames=args.batch_size,
     xtc=True,
-    out_dir='../samples/',
+    out_dir=args.save_path,
     suffix='_i100'
 )
 
-in_shape = prior_model.dims
+in_shape = prior_model.dims[1:]
 seq_len = in_shape[2]
 
 id = "protein_mdgen_"+ r_str +"_len_" + str(seq_len)
@@ -97,7 +101,6 @@ id = "protein_mdgen_"+ r_str +"_len_" + str(seq_len)
 replay_buffer = None    
 if not args.replay_buffer == 'none':
     replay_buffer = ReplayBuffer(rb_size=10000, rb_sample_strategy=args.replay_buffer)
-
 
 rtb_model = protein_rtb.ProteinRTBModel(
     device=device,
@@ -117,7 +120,8 @@ rtb_model = protein_rtb.ProteinRTBModel(
     beta_start=args.beta_start,
     beta_end=args.beta_end,
     loss_batch_size=args.loss_batch_size,
-    replay_buffer=replay_buffer
+    replay_buffer=replay_buffer,
+    config=args
 )
 
 if args.langevin:
@@ -128,8 +132,10 @@ if args.langevin:
         wandb_track=False
     )
 
-rtb_model.finetune(shape=(args.batch_size, *in_shape), n_iters = args.n_iters,
-                   wandb_track=args.wandb_track, learning_rate=args.lr,
+rtb_model.finetune(shape=(args.batch_size, *in_shape),
+                   n_iters=args.n_iters,
+                   wandb_track=args.wandb_track,
+                   learning_rate=args.lr,
                    clip=args.clip,
                    prior_sample_prob=args.prior_sample_prob,
                    replay_buffer_prob=args.replay_buffer_prob,

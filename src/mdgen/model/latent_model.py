@@ -238,12 +238,12 @@ class LatentMDGenModel(nn.Module):
             x = x + self.time_embed[:, :, None]
 
         if x_cond is not None:
-            x = x + self.cond_to_emb(x_cond) + self.mask_to_emb(x_cond_mask)  # token has cond g, tau
+            x = x + self.cond_to_emb(x_cond).permute(1, 0, 2, 3) + self.mask_to_emb(x_cond_mask).permute(1, 0, 2, 3)  # token has cond g, tau
 
         t = self.t_embedder(t * self.args.time_multiplier)[:, None]
 
         if self.args.prepend_ipa:  # IPA doesn't need checkpointing
-            x = x + self.run_ipa(t[:, 0], mask[:, 0], start_frames, end_frames, aatype, x_d=x_d)[:, None]
+            x = x + self.run_ipa(t[:, 0], mask.reshape(-1, mask.shape[-1]), start_frames, end_frames, aatype, x_d=x_d)[:, None]
 
         for layer_idx, layer in enumerate(self.layers):
             x = grad_checkpoint(layer, (x, t, mask, start_frames), self.args.grad_checkpointing)

@@ -16,6 +16,10 @@ from rtb_utils.sde import VPSDE, DDPM
 import rtb_utils as utils
 
 
+def create_batches(ids, batch_size):
+    for i in range(0, len(ids), batch_size):
+        yield ids[i:i + batch_size]
+
 class ProteinRTBModel(nn.Module):
     def __init__(self,
                  device,
@@ -35,11 +39,13 @@ class ProteinRTBModel(nn.Module):
                  beta_start=1.0,
                  beta_end=10.0,
                  loss_batch_size=64,
-                 replay_buffer=None
+                 replay_buffer=None,
+                 config={}
                  ):
         super().__init__()
 
         self.device = device
+        self.config = config
 
         if inference_type == 'vpsde':
             self.sde = VPSDE(device=self.device, beta_schedule='cosine')
@@ -128,7 +134,7 @@ class ProteinRTBModel(nn.Module):
         # print("input x.shape: ", x.shape)
 
         # reshape x to gfn_shape
-        x = x.squeeze().permute(0, 2, 1).reshape(x.shape[0], *self.gfn_shape)
+        x = x.squeeze(1).permute(0, 2, 1).reshape(x.shape[0], *self.gfn_shape)
 
         model_out = self.model(t, x)
         # reshape to in_shape [1, 64, 7]
@@ -143,7 +149,7 @@ class ProteinRTBModel(nn.Module):
         # print("input x.shape: ", x.shape)
 
         # reshape x to gfn_shape
-        x = x.squeeze().permute(0, 2, 1).reshape(x.shape[0], *self.gfn_shape)
+        x = x.squeeze(1).permute(0, 2, 1).reshape(x.shape[0], *self.gfn_shape)
 
         with torch.no_grad():
             model_out = self.ref_model(t, x)
@@ -236,7 +242,7 @@ class ProteinRTBModel(nn.Module):
 
         if wandb_track:
             wandb.init(
-                project='cfm_posterior',
+                project='mdgen_cfm_posterior',
                 entity=self.entity,
                 save_code=True,
                 name=run_name
@@ -306,7 +312,7 @@ class ProteinRTBModel(nn.Module):
                 img = self.prior_model.sample(zs0=x)
             else:
                 img = self.prior_model.sample()
-            log_r = self.reward_model(img, tmp_dir=self.tmp_dir).to(self.device)
+            log_r = self.reward_model(self.prior_model.peptide, data_path=self.config.data_path, tmp_dir=self.prior_model.out_dir).to(self.device)
         if return_img:
             return log_r, img
         return log_r
@@ -349,8 +355,7 @@ class ProteinRTBModel(nn.Module):
                     x_1=x_1,
                     backward=rb_sample
                 )
-            x_mean_posterior, logpf_prior, logpf_posterior = fwd_logs['x_mean_posterior'], fwd_logs['logpf_prior'], \
-            fwd_logs['logpf_posterior']
+            x_mean_posterior, logpf_prior, logpf_posterior = fwd_logs['x_mean_posterior'], fwd_logs['logpf_prior'], fwd_logs['logpf_posterior']
 
             if rb_sample:
                 scale_factor = 1.0  # 0.5
@@ -380,7 +385,7 @@ class ProteinRTBModel(nn.Module):
                                            logpf_posterior + self.logZ - logpf_prior - self.beta * logr_x_prime) ** 2) - learning_cutoff).relu()
 
             # Add to replay_buffer
-            if not rb_sample:
+            if not rb_sample and self.replay_buffer is not None:
                 self.replay_buffer.add(x_mean_posterior.detach(), logr_x_prime.detach(), rtb_loss.detach())
 
             # compute correction
@@ -456,7 +461,7 @@ class ProteinRTBModel(nn.Module):
 
         if wandb_track:
             wandb.init(
-                project='cfm_posterior',
+                project='mdgen_cfm_posterior',
                 entity=self.entity,
                 save_code=True,
                 name=run_name
@@ -560,6 +565,11 @@ class ProteinRTBModel(nn.Module):
         if not os.path.exists(self.tmp_dir):
             os.makedirs(self.tmp_dir)
 
+        self.prior_model.out_dir = self.tmp_dir + "samples/"
+
+        if not os.path.exists(self.prior_model.out_dir):
+            os.makedirs(self.prior_model.out_dir)
+
         if self.load_ckpt:
             self.model, optimizer, load_it = self.load_checkpoint(self.model, optimizer)
         else:
@@ -567,7 +577,7 @@ class ProteinRTBModel(nn.Module):
 
         if wandb_track:
             wandb.init(
-                project='cfm_posterior',
+                project='mdgen_cfm_posterior',
                 entity=self.entity,
                 save_code=True,
                 name=run_name
@@ -1125,7 +1135,7 @@ class ProteinRTBModel(nn.Module):
         steps = list(range(len(traj)))
         steps = [step for step in steps[:-1] if step not in no_grad_steps]
 
-        for i, batch_steps in enumerate(utils.create_batches(steps, traj_batch)):
+        for i, batch_steps in enumerate(create_batches(steps, traj_batch)):
 
             # pbar.set_description(f"Sampling from the posterior | batch = {i}/{int(len(steps)//batch_size)} - {i*100/len(steps)//batch_size:.2f}%")
 

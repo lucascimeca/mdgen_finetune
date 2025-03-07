@@ -458,7 +458,7 @@ class NewMDGenWrapper(Wrapper):
         samples = sample_fn(
             zs,
             partial(self.model.forward_inference, **prep['model_kwargs'])
-        )[-1]
+        )[-1].permute(1, 0, 2, 3)
 
         if self.args.no_frames:
             atom14 = atom37_to_atom14(
