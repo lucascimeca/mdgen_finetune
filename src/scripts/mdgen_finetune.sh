@@ -53,6 +53,6 @@ unset CUDA_VISIBLE_DEVICES
 #        --load_path ./../models/pretrained --data_path $SCRATCH/data --exp_name $4
 #        > ~/script_outputs/"${SLURM_JOB_NAME}.txt"
 
-python ../mdgen_finetune.py --diffusion_steps 20 --save_path ~/scratch/mdgen/samples/ \
+python ../prot_train.py --diffusion_steps 20 --save_path ~/scratch/mdgen/samples/ \
                             --data_path ~/scratch/mdgen/data/ --splits_path ../splits/ \
                             --load_path ../pretrained/ --wandb_track True
