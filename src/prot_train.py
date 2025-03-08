@@ -1,5 +1,6 @@
 import sys
 
+print("HERE-3")
 from rtb_utils.priors import MDGenSimulator
 from rtb_utils.rewards import Amber14Reward
 
@@ -17,6 +18,7 @@ from rtb_utils import protein_rtb
 #import tb 
 from rtb_utils.replay_buffer import ReplayBuffer
 
+print("HERE-2")
 # from proteins.reward_ss_div import SSDivReward # SUBSTUITUTE
 # from proteins.foldflow_prior import FoldFlowModel   # SUBSTITUTE
 
@@ -24,6 +26,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"running experiments on '{device}'")
 parser = argparse.ArgumentParser()
 
+print("HERE-1")
 parser.add_argument('--exp_name', default="test", type=str, help='Experiment name')
 parser.add_argument('--tb', default=False, type=strtobool, help='Whether to use tb (vs rtb)')
 parser.add_argument('--n_iters', default=50000, type=int, metavar='N', help='Number of training iterations')
