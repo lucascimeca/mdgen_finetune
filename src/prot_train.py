@@ -12,10 +12,10 @@ import random
 import argparse
 from distutils.util import strtobool
 
-from src.rtb_utils import protein_rtb
+from rtb_utils import protein_rtb
 #import tb_sample_xt
 #import tb 
-from src.rtb_utils.replay_buffer import ReplayBuffer
+from rtb_utils.replay_buffer import ReplayBuffer
 
 # from proteins.reward_ss_div import SSDivReward # SUBSTUITUTE
 # from proteins.foldflow_prior import FoldFlowModel   # SUBSTITUTE

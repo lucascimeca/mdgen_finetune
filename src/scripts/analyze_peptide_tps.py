@@ -18,7 +18,7 @@ parser.add_argument('--no_overwrite', nargs='*', default=[])
 parser.add_argument('--num_workers', type=int, default=1)
 args = parser.parse_args()
 
-import src.mdgen.analysis
+import mdgen.analysis
 import pyemma, tqdm, os
 import numpy as np
 import matplotlib.pyplot as plt

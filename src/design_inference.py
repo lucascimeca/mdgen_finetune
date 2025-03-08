@@ -20,14 +20,14 @@ parser.add_argument('--split', type=str, default='splits/4AA_test.csv')
 parser.add_argument('--chunk_idx', type=int, default=0)
 parser.add_argument('--n_chunks', type=int, default=1)
 args = parser.parse_args()
-import src.mdgen.analysis
+import mdgen.analysis
 import os, torch, mdtraj, tqdm
-from src.mdgen.geometry import atom14_to_atom37, atom37_to_torsions
-from src.mdgen.tensor_utils import tensor_tree_map
+from mdgen.geometry import atom14_to_atom37, atom37_to_torsions
+from mdgen.tensor_utils import tensor_tree_map
 
-from src.mdgen.residue_constants import restype_order
-from src.mdgen.wrapper import NewMDGenWrapper
-from src.mdgen.dataset import atom14_to_frames
+from mdgen.residue_constants import restype_order
+from mdgen.wrapper import NewMDGenWrapper
+from mdgen.dataset import atom14_to_frames
 import pandas as pd
 import contextlib
 import numpy as np

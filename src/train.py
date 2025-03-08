@@ -1,11 +1,11 @@
-from src.mdgen.parsing import parse_train_args
+from mdgen.parsing import parse_train_args
 args = parse_train_args()
-from src.mdgen.logger import get_logger
+from mdgen.logger import get_logger
 logger = get_logger(__name__)
 
 import torch, os, wandb
-from src.mdgen.dataset import MDGenDataset
-from src.mdgen.wrapper import NewMDGenWrapper
+from mdgen.dataset import MDGenDataset
+from mdgen.wrapper import NewMDGenWrapper
 from pytorch_lightning.callbacks import ModelCheckpoint, ModelSummary
 import pytorch_lightning as pl
 

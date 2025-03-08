@@ -8,10 +8,10 @@ from openmm.unit import nanometer, bar, kelvin, picosecond, femtosecond
 from openmm import LangevinMiddleIntegrator, Platform, Vec3, MonteCarloBarostat
 from tqdm import tqdm
 
-from src.mdgen.utils import atom14_to_pdb
+from mdgen.utils import atom14_to_pdb
 
-from src.mdgen.geometry import atom14_to_atom37
-from src.mdgen.utils import create_full_prot, prots_to_pdb
+from mdgen.geometry import atom14_to_atom37
+from mdgen.utils import create_full_prot, prots_to_pdb
 
 import torch
 import torch.nn as nn

@@ -5,7 +5,7 @@ parser.add_argument("--mddir", default='share/4AA_sims_implicit')
 parser.add_argument('--pdb_id', nargs='*', default=[])
 args = parser.parse_args()
 
-import src.mdgen.analysis
+import mdgen.analysis
 import tqdm, os
 import matplotlib.pyplot as plt
 from statsmodels.tsa.stattools import acovf

@@ -2,11 +2,11 @@ import glob
 
 from openmm.app import PDBFile
 from pdbfixer import PDBFixer
-from src.mdgen.geometry import atom14_to_frames, atom14_to_atom37, atom37_to_torsions
-from src.mdgen.residue_constants import restype_order, restype_atom37_mask
-from src.mdgen.tensor_utils import tensor_tree_map
-from src.mdgen.wrapper import NewMDGenWrapper
-from src.mdgen.utils import atom14_to_pdb
+from mdgen.geometry import atom14_to_frames, atom14_to_atom37, atom37_to_torsions
+from mdgen.residue_constants import restype_order, restype_atom37_mask
+from mdgen.tensor_utils import tensor_tree_map
+from mdgen.wrapper import NewMDGenWrapper
+from mdgen.utils import atom14_to_pdb
 
 import os
 import time

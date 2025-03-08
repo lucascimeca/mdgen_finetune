@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import argparse
-from src.mdgen.residue_constants import aatype_to_str_sequence, restype_order
+from mdgen.residue_constants import aatype_to_str_sequence, restype_order
 import json
 from tqdm import tqdm
 

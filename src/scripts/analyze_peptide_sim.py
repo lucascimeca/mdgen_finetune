@@ -16,7 +16,7 @@ parser.add_argument('--num_workers', type=int, default=1)
 
 args = parser.parse_args()
 
-import src.mdgen.analysis
+import mdgen.analysis
 import pyemma, tqdm, os, pickle
 from scipy.spatial.distance import jensenshannon
 from multiprocessing import Pool
