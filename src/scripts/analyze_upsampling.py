@@ -13,8 +13,8 @@ import numpy as np
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 def do(name):
-    feats, ref = src.mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True, cossin=False)
-    feats, traj = src.mdgen.analysis.get_featurized_traj(f'{args.pdbdir}/{name}', sidechains=True, cossin=False)
+    feats, ref = mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True, cossin=False)
+    feats, traj = mdgen.analysis.get_featurized_traj(f'{args.pdbdir}/{name}', sidechains=True, cossin=False)
 
 
     md_autocorr = {}

@@ -1,7 +1,7 @@
 # https://github.com/HazyResearch/safari/blob/main/standalone_hyena.py
 """
 Simplified standalone version of Hyena: https://arxiv.org/abs/2302.10866, designed for quick experimentation.
-A complete version is available under `src.models.sequence.hyena`.
+A complete version is available under `models.sequence.hyena`.
 """
 
 import math

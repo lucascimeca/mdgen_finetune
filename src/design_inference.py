@@ -82,11 +82,11 @@ def do(model, name, seqres):
         ref_kmeans = pkl_metadata['ref_kmeans']
     else:
         with temp_seed(137):
-            feats, ref = src.mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True)
-            tica, _ = src.mdgen.analysis.get_tica(ref)
-            kmeans, ref_kmeans = src.mdgen.analysis.get_kmeans(tica.transform(ref))
+            feats, ref = mdgen.analysis.get_featurized_traj(f'{args.mddir}/{name}/{name}', sidechains=True)
+            tica, _ = mdgen.analysis.get_tica(ref)
+            kmeans, ref_kmeans = mdgen.analysis.get_kmeans(tica.transform(ref))
             try:
-                msm, pcca, cmsm = src.mdgen.analysis.get_msm(ref_kmeans, nstates=10)
+                msm, pcca, cmsm = mdgen.analysis.get_msm(ref_kmeans, nstates=10)
             except Exception as e:
                 print('ERROR', e, name, flush=True)
                 return
