@@ -1,7 +1,7 @@
 import sys
 
-from src.rtb_utils.priors import MDGenSimulator
-from src.rtb_utils.rewards import Amber14Reward
+from rtb_utils.priors import MDGenSimulator
+from rtb_utils.rewards import Amber14Reward
 
 sys.path.append('./proteins/')
 
