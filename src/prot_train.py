@@ -21,7 +21,7 @@ from rtb_utils.replay_buffer import ReplayBuffer
 # from proteins.foldflow_prior import FoldFlowModel   # SUBSTITUTE
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+print(f"running experiments on '{device}'")
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--exp_name', default="test", type=str, help='Experiment name')
