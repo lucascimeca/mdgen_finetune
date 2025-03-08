@@ -54,5 +54,5 @@ unset CUDA_VISIBLE_DEVICES
 #        > ~/script_outputs/"${SLURM_JOB_NAME}.txt"
 
 python ../prot_train.py --diffusion_steps 20 --save_path ~/scratch/mdgen/samples/ \
-                            --data_path ~/scratch/mdgen/data/ --splits_path ../splits/ \
-                            --load_path ../pretrained/ --wandb_track True
+                            --data_path ~/scratch/mdgen/data/ --splits_path ../../splits/ \
+                            --load_path ../../pretrained/ --wandb_track True
