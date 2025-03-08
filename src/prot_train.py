@@ -54,8 +54,8 @@ parser.add_argument('--inference', default='vpsde', type=str, help='Inference me
 parser.add_argument('--seed', default=0, type=int, help='Random seed for training')
 parser.add_argument('--clip', default=0.1, type=float, help='Gradient clipping value')
 
-parser.add_argument('--data_path', default='~/scratch/mdflow/data/', type=str, help='Path to save model checkpoints')
-parser.add_argument('--splits_path', default='~/scratch/mdflow/splits/', type=str, help='Path to save model checkpoints')
+parser.add_argument('--data_path', default='~/scratch/mdgen/data/', type=str, help='Path to save model checkpoints')
+parser.add_argument('--splits_path', default='~/scratch/mdgen/splits/', type=str, help='Path to save model checkpoints')
 
 
 args = parser.parse_args()
