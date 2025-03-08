@@ -17,6 +17,7 @@ import random
 from rtb_utils.sde import VPSDE, DDPM
 import rtb_utils as utils
 
+from datetime import datetime
 
 def create_batches(ids, batch_size):
     for i in range(0, len(ids), batch_size):
@@ -559,7 +560,7 @@ class ProteinRTBModel(nn.Module):
         run_name = self.id + '_sde_' + self.sde_type + '_steps_' + str(self.steps) + '_lr_' + str(
             learning_rate) + '_beta_start_' + str(self.beta_start) + '_beta_end_' + str(
             self.beta_end) + '_anneal_' + str(anneal) + '_prior_prob_' + str(prior_sample_prob) + '_rb_prob_' + str(
-            replay_buffer_prob) + '_clip_' + str(clip)
+            replay_buffer_prob) + '_clip_' + str(clip) + f'_{datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}'
 
         self.tmp_dir = os.path.expanduser("~/scratch/CNF_tmp/" + run_name + '/')
         print("TMP DIR for pdb files: ", self.tmp_dir)
