@@ -49,4 +49,5 @@ unset CUDA_VISIBLE_DEVICES
 
 python ../prot_train.py --diffusion_steps 20 --save_path ~/scratch/mdgen/samples/ \
                         --data_path ~/scratch/mdgen/data/ --splits_path ../../splits/ \
-                        --load_path ../../pretrained/ --wandb_track True
+                        --load_path ../../pretrained/ --clip 0 \
+                        --wandb_track True

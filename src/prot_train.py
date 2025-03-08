@@ -1,6 +1,5 @@
 import sys
 
-print("HERE-3")
 from rtb_utils.priors import MDGenSimulator
 from rtb_utils.rewards import Amber14Reward
 
@@ -18,7 +17,6 @@ from rtb_utils import protein_rtb
 #import tb 
 from rtb_utils.replay_buffer import ReplayBuffer
 
-print("HERE-2")
 # from proteins.reward_ss_div import SSDivReward # SUBSTUITUTE
 # from proteins.foldflow_prior import FoldFlowModel   # SUBSTITUTE
 
@@ -26,7 +24,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"running experiments on '{device}'")
 parser = argparse.ArgumentParser()
 
-print("HERE-1")
 parser.add_argument('--exp_name', default="test", type=str, help='Experiment name')
 parser.add_argument('--tb', default=False, type=strtobool, help='Whether to use tb (vs rtb)')
 parser.add_argument('--n_iters', default=50000, type=int, metavar='N', help='Number of training iterations')
@@ -63,7 +60,7 @@ parser.add_argument('--splits_path', default='~/scratch/mdgen/splits/', type=str
 
 args = parser.parse_args()
 
-print("HERE0")
+
 # set seeds
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -85,7 +82,6 @@ r_str = "ss_div_seed_" + str(args.seed)
 
 reward_args = []
 
-print("HERE1")
 prior_model = MDGenSimulator(
     peptide=args.peptide,
     sim_ckpt=f'{args.load_path}forward_sim.ckpt',
@@ -99,7 +95,6 @@ prior_model = MDGenSimulator(
     suffix='_i100'
 )
 
-print("HERE2")
 in_shape = prior_model.dims[1:]
 seq_len = in_shape[2]
 
@@ -109,7 +104,6 @@ replay_buffer = None
 if not args.replay_buffer == 'none':
     replay_buffer = ReplayBuffer(rb_size=10000, rb_sample_strategy=args.replay_buffer)
 
-print("HERE3")
 rtb_model = protein_rtb.ProteinRTBModel(
     device=device,
     reward_model=reward_model,
@@ -132,7 +126,6 @@ rtb_model = protein_rtb.ProteinRTBModel(
     config=args
 )
 
-print("HERE4")
 if args.langevin:
     rtb_model.pretrain_trainable_reward(
         n_iters=20,

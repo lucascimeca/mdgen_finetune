@@ -115,6 +115,9 @@ class ProteinRTBModel(nn.Module):
             dropout=0.0,
         ).to(self.device)
 
+        for param in self.ref_model.parameters():
+            param.requires_grad = False
+
         self.ref_proc = True  # False
 
         # Prior flow model pipeline
@@ -179,21 +182,6 @@ class ProteinRTBModel(nn.Module):
         filepath = savedir + 'checkpoint_' + str(epoch) + '.pth'
         torch.save(checkpoint, filepath)
         print(f"Checkpoint saved at {filepath}")
-
-    def load_checkpoint(self, model, optimizer):
-        if self.load_ckpt_path is None:
-            print("Checkpoint path not provided. Checkpoint not loaded.")
-            return model, optimizer
-
-        checkpoint = torch.load(self.load_ckpt_path)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        print(f"Checkpoint loaded from {self.load_ckpt_path}")
-
-        # get iteration number (number before .pth)
-        it = int(self.load_ckpt_path.split('/')[-1].split('_')[-1].split('.')[0])
-        print("Epoch number: ", it)
-        return model, optimizer, it
 
     def load_checkpoint(self, model, optimizer):
         if self.load_ckpt_path is None:
@@ -384,8 +372,7 @@ class ProteinRTBModel(nn.Module):
             print("batch logpf_prior: ", logpf_prior)
             print("batch logr_x_prime: ", logr_x_prime)
 
-            rtb_loss = 0.5 * (((
-                                           logpf_posterior + self.logZ - logpf_prior - self.beta * logr_x_prime) ** 2) - learning_cutoff).relu()
+            rtb_loss = 0.5 * (((logpf_posterior + self.logZ - logpf_prior - self.beta * logr_x_prime) ** 2) - learning_cutoff).relu()
 
             # Add to replay_buffer
             if not rb_sample and self.replay_buffer is not None:
@@ -413,7 +400,7 @@ class ProteinRTBModel(nn.Module):
                 batch_size=B
             )
 
-        return rtb_loss.detach(), logr_x_prime
+        return rtb_loss, logr_x_prime
 
     def dsm_loss(self, x0, t):
         B = x0.shape[0]
@@ -1147,9 +1134,9 @@ class ProteinRTBModel(nn.Module):
 
             lp_correction = self.get_langevin_correction(xs)
             f_posterior = -self.sde.drift(t_, xs) - g ** 2 * (
-                        self.model_and_shape(t_[:, 0, 0, 0], xs) + lp_correction) / self.sde.sigma(t_).view(-1,
-                                                                                                            *[1] * len(
-                                                                                                                D))
+                        self.model_and_shape(t_[:, 0, 0, 0], xs) + lp_correction) / \
+                          self.sde.sigma(t_).view(-1,
+                                                  *[1] * len(D))
 
             # compute parameters for denoising step (wrt posterior)
             x_mean_posterior = xs + f_posterior * dts
@@ -1173,13 +1160,8 @@ class ProteinRTBModel(nn.Module):
             # compute log-likelihoods of reached pos wrt to posterior model
             logpf_posterior = pf_post_dist.log_prob(xs).sum(tuple(range(1, len(xs.shape))))
 
-            if rb:
-                scale_factor = 1.0  # 0.5
-            else:
-                scale_factor = 1.0
-
             # compute loss for posterior & accumulate gradients.
-            partial_rtb = ((scale_factor * logpf_posterior + self.logZ) * correction.repeat(bs)).mean()
+            partial_rtb = ((logpf_posterior + self.logZ) * correction.repeat(bs)).mean()
             partial_rtb.backward()
 
             # print("In rtb backward logpf poserior + logZ * loss: ", (logpf_posterior + self.logZ) * correction.repeat(bs))
