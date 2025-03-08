@@ -657,8 +657,8 @@ class ProteinRTBModel(nn.Module):
                         self.prior_model.fix_and_save_pdbs(torch.FloatTensor(self.prior_model.batch_arr))
                         # save all the frames from the actual data
                         self.prior_model.target_dist = self.reward_model(self.prior_model.peptide,
-                                                        data_path=self.config.data_path,
-                                                        tmp_dir=self.prior_model.out_dir)
+                                                                         data_path=self.config.data_path,
+                                                                         tmp_dir=self.prior_model.out_dir)
                         print("Done!")
 
                     if not it % 100 == 0:

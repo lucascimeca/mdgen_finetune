@@ -9,11 +9,23 @@ from scipy.stats import entropy
 
 
 # For Jensen-Shannon Divergence
-def js_divergence(p, q):
-    p = np.asarray(p)
-    q = np.asarray(q)
-    m = 0.5 * (p + q)
-    return 0.5 * (entropy(p, m) + entropy(q, m))
+def js_divergence(samples_p, samples_q, bins=100, epsilon=1e-10):
+    """Compute JS divergence between two sample sets."""
+    # Combine samples to determine shared bin edges
+    all_samples = np.concatenate([samples_p, samples_q])
+    bin_edges = np.linspace(np.min(all_samples), np.max(all_samples), bins)
+
+    # Compute histograms
+    hist_p, _ = np.histogram(samples_p, bins=bin_edges, density=True)
+    hist_q, _ = np.histogram(samples_q, bins=bin_edges, density=True)
+
+    # Normalize and add epsilon to avoid zeros
+    hist_p = hist_p / hist_p.sum() + epsilon
+    hist_q = hist_q / hist_q.sum() + epsilon
+
+    # Compute mixture and JS divergence
+    m = 0.5 * (hist_p + hist_q)
+    return 0.5 * (entropy(hist_p, m) + entropy(hist_q, m))
 
 
 def compare_distributions(dist1, dist2):
