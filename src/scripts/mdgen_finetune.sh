@@ -34,11 +34,11 @@ git pull
 
 
 # Get a unique port for this job based on the job ID
-export MASTER_PORT=$(expr 10000 + $(echo -n $SLURM_JOBID | tail -c 4))
-export MASTER_ADDR="127.0.0.1"
+#export MASTER_PORT=$(expr 10000 + $(echo -n $SLURM_JOBID | tail -c 4))
+#export MASTER_ADDR="127.0.0.1"
 
 # Fixes issues with MIG-ed GPUs with versions of PyTorch < 2.0
-unset CUDA_VISIBLE_DEVICES
+#unset CUDA_VISIBLE_DEVICES
 
 
 # run the following line to run prior code -- note, the path assume you run the files from the "scripts" folder
