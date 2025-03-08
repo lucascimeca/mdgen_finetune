@@ -535,18 +535,7 @@ class ProteinRTBModel(nn.Module):
                         backward=False
                     )
 
-                model_samples = fwd_logs['x_mean_posterior']
-
-                # w1, w2 = utils.wasserstein_dist_samples(model_samples.reshape(-1, 7), x0.reshape(-1, 7))
-
-                # get 
-                # fig, true_trans_std, model_trans_std = utils.plot_so3_comparison(model_samples.reshape(-1, 7), x0.reshape(-1, 7))
-
                 wandb.log({"loss": loss.item(), "epoch": it})
-                # wandb.log({"loss": loss.item(),  "wasserstein1": w1, "wasserstein2":w2, "epoch": it,
-                #           "rotation comp fig": wandb.Image(fig), "translation true std": true_trans_std.mean().item(), "model trans std": model_trans_std.mean().item()})
-
-                # save model and optimizer state
                 self.save_checkpoint(self.model, optimizer, it, run_name)
 
         return
@@ -563,6 +552,7 @@ class ProteinRTBModel(nn.Module):
             replay_buffer_prob) + '_clip_' + str(clip) + f'_{datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}'
 
         self.tmp_dir = os.path.expanduser("~/scratch/CNF_tmp/" + run_name + '/')
+        self.running_dist = torch.FloatTensor([])
         print("TMP DIR for pdb files: ", self.tmp_dir)
 
         if not os.path.exists(self.tmp_dir):
@@ -635,6 +625,8 @@ class ProteinRTBModel(nn.Module):
                 optimizer.zero_grad()
                 loss, logr = self.batched_rtb(shape=shape, prior_sample=prior_traj, rb_sample=rb_traj)
 
+                self.running_dist = torch.FloatTensor(self.running_dist[-(len(self.prior_model.batch_arr)-len(logr)):].tolist() + logr.detach().cpu().tolist())
+
                 if clip > 0:
                     v_g = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=clip)
                     gnorm = v_g.item()
@@ -661,52 +653,20 @@ class ProteinRTBModel(nn.Module):
                                                                          tmp_dir=self.prior_model.out_dir)
                         print("Done!")
 
-                    if not it % 100 == 0:
-                        wandb.log({"loss": loss.mean().item(),
-                                   "logZ": self.logZ.detach().cpu().numpy(),
-                                   "log_r": logr.mean().item(),
-                                   "gnorm": gnorm,
-                                   "epoch": it})
-                    else:
-                        with torch.no_grad():
+                    logs = {"loss": loss.mean().item(),
+                            "logZ": self.logZ.detach().cpu().numpy(),
+                            "log_r": logr.mean().item(),
+                            "gnorm": gnorm,
+                            "epoch": it}
 
-                            if self.sde_type == 'vpsde' and self.ref_proc:
-                                logs = self.forward_ref_proc(
-                                    shape=(num_test_samples, *D),
-                                    steps=self.steps
-                                )
-                            elif self.sde_type == 'vpsde':
-                                logs = self.forward(
-                                    shape=(num_test_samples, *D),
-                                    steps=self.steps
-                                )
-                            elif self.sde_type == 'ddpm':
-                                logs = self.forward_ddpm(
-                                    shape=(num_test_samples, *D),
-                                    steps=self.steps
-                                )
+                    if not it % 20 == 0:
+                        dist_logs = compare_distributions(self.prior_model.target_dist.detach().cpu(), self.running_dist.detach().cpu())
+                        logs.update(dist_logs)
 
-                            # x = self.prior_model.normalize_rigids(logs['x_mean_posterior'],
-                            #                                       scale_trans=(not self.ref_proc))
-                            self.prior_model.sample(zs0=logs['x_mean_posterior'])  # loads the tmp folder with proteins
-                            post_reward = self.reward_model(self.prior_model.peptide,
-                                                            data_path=self.config.data_path,
-                                                            tmp_dir=self.prior_model.out_dir)
+                    wandb.log(logs)
 
-                            logs = {"loss": loss.mean().item(),
-                                    "logZ": self.logZ.detach().cpu().numpy(),
-                                    'post_reward': post_reward,
-                                    "log_r": logr.mean().item(),
-                                    "gnorm": gnorm,
-                                    "epoch": it}
-
-                            dist_logs = compare_distributions(self.prior_model.target_dist.detach().cpu(), post_reward.detach().cpu())
-                            logs.update(dist_logs)
-
-                            wandb.log(logs)
-
-                            # save model and optimizer state
-                            self.save_checkpoint(self.model, optimizer, it, run_name)
+                    # save model and optimizer state
+                    self.save_checkpoint(self.model, optimizer, it, run_name)
 
     def get_langevin_correction(self, x):
         # add gradient wrt x of trainable reward to model
