@@ -3,7 +3,7 @@ import sys
 from rtb_utils.priors import MDGenSimulator
 from rtb_utils.rewards import Amber14Reward
 
-sys.path.append('./proteins/')
+# sys.path.append('./proteins/')
 
 import torch 
 import numpy as np 
