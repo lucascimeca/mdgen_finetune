@@ -14,7 +14,7 @@ import mdtraj, os, tqdm
 import pandas as pd 
 from multiprocessing import Pool
 import numpy as np
-from mdgen import residue_constants as rc
+from src.mdgen import residue_constants as rc
 
 os.makedirs(args.outdir, exist_ok=True)
 
@@ -23,10 +23,9 @@ names = df.index
 
 def main():
     jobs = []
-    # for name in names:
-    name = 'FLRH'
-    # if os.path.exists(f'{args.outdir}/{name}{args.suffix}.npy'): continue
-    jobs.append(name)
+    for name in names:
+        if os.path.exists(f'{args.outdir}/{name}{args.suffix}.npy'): continue
+        jobs.append(name)
 
     if args.num_workers > 1:
         p = Pool(args.num_workers)
