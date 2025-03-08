@@ -161,7 +161,7 @@ class Amber14Reward(nn.Module):
             _ = simulation.context.getState(getEnergy=True)  # Warmup
 
         energies = []
-        for i in range(len(traj.xyz)):
+        for i in tqdm(range(len(traj.xyz)), total=len(traj.xyz)):
             if self.implicit:
                 simulation.context.setPositions(all_positions[i])
                 state = simulation.context.getState(getEnergy=True)
