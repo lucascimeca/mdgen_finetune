@@ -53,10 +53,6 @@ unset CUDA_VISIBLE_DEVICES
 #        --load_path ./../models/pretrained --data_path $SCRATCH/data --exp_name $4
 #        > ~/script_outputs/"${SLURM_JOB_NAME}.txt"
 
-python ../mdgen_finetune.py --data_path $SCRATCH/data/ --save_folder $SCRATCH/rtb_inverse_results \
-       --load_path ./models/pretrained --use_rtb_drift True --learn_dps_drift False \
-       --use_prior_drift False --replay_buffer False --conditional True --compute_fid True \
-       --dataset $1 --inv_task $2 --lr $3 --sampling_length $4 --batch_size $5 \
-       --accumulate_gradient_every $6 --epochs $7 --energy_temperature $8 \
-       --rtb_batched_train $9 --batched_rtb_size ${10} --vargrad ${11} --ldm ${12} --particles ${13}\
-       --checkpointing ${14} --push_to_hf ${15} --method ${16} --cla ${17}  --use_dps_drift ${18} --exp_name ${19}
+python ../mdgen_finetune.py --diffusion_steps 20 --save_path ~/scratch/mdgen/samples/ \
+                            --data_path ~/scratch/mdgen/data/ --splits_path ../splits/ \
+                            --load_path ../pretrained/ --wandb_track True
