@@ -40,14 +40,7 @@ export MASTER_ADDR="127.0.0.1"
 # Fixes issues with MIG-ed GPUs with versions of PyTorch < 2.0
 unset CUDA_VISIBLE_DEVICES
 
-
-# run the following line to run prior code -- note, the path assume you run the files from the "scripts" folder
-#python ../finetune_posterior.py --algo mle --batch_size 128 --lr $1 --lr_logZ $2 --traj_length 100 \
-#        --epochs 1000 --learning_cutoff $3 --save_folder $SCRATCH/gfn_generated_results \
-#        --load_path ./../models/pretrained --data_path $SCRATCH/data --exp_name $4
-#        > ~/script_outputs/"${SLURM_JOB_NAME}.txt"
-
 python ../prot_train.py --diffusion_steps 20 --save_path ~/scratch/mdgen/samples/ \
                         --data_path ~/scratch/mdgen/data/ --splits_path ../../splits/ \
-                        --load_path ../../pretrained/ --tb True --clip 0 --learning_rate 1e-5 \
-                        --wandb_track True
+                        --load_path ../../pretrained/ --tb False --learning_rate 1e-5 \
+                        ----beta_start $1 --wandb_track True

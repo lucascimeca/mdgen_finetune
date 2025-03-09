@@ -1,6 +1,6 @@
 import os
 
-from rtb_utils.plot_utils import compare_distributions
+from rtb_utils.plot_utils import compare_distributions, plot_xyz_distributions
 
 os.environ['PYMOL_QUIET'] = '1'
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
@@ -200,7 +200,7 @@ class ProteinRTBModel(nn.Module):
 
     def classifier_reward(self, x):
         if self.num_classes == 1:
-            log_r_target = self.log_reward(x)
+            log_r_target = self.log_reward(x)['log_r'].to(self.device)
             log_r_pred = self.trainable_reward(x)
             loss = ((log_r_pred - log_r_target) ** 2).mean()
         else:
@@ -251,7 +251,7 @@ class ProteinRTBModel(nn.Module):
             x = torch.randn(B, *D, device=self.device)
 
             if self.num_classes == 1:
-                log_r_target = self.log_reward(x)
+                log_r_target = self.log_reward(x)['log_r'].to(self.device)
                 log_r_pred = self.trainable_reward(x)
                 loss = ((log_r_pred - log_r_target) ** 2).mean()
 
@@ -300,13 +300,11 @@ class ProteinRTBModel(nn.Module):
     def log_reward(self, x, from_prior=False, return_img=False):
         with torch.no_grad():
             if not from_prior:
-                img = self.prior_model.sample(zs0=x)
+                self.prior_model.sample(zs0=x)
             else:
-                img = self.prior_model.sample()
-            log_r = self.reward_model(self.prior_model.peptide, data_path=self.config.data_path, tmp_dir=self.prior_model.out_dir).to(self.device)
-        if return_img:
-            return log_r, img
-        return log_r
+                self.prior_model.sample()
+            rwd_logs = self.reward_model(self.prior_model.peptide, data_path=self.config.data_path, tmp_dir=self.prior_model.out_dir)
+        return rwd_logs
 
     def batched_rtb(self, shape, learning_cutoff=.1, prior_sample=False, rb_sample=False):
         # first pas through, get trajectory & loss for correction
@@ -354,7 +352,8 @@ class ProteinRTBModel(nn.Module):
                 scale_factor = 1.0
 
             if not rb_sample:
-                logr_x_prime = self.log_reward(x_mean_posterior)
+                rwd_logs = self.log_reward(x_mean_posterior)
+                logr_x_prime = rwd_logs['log_r'].to(self.device)
 
             # for off policy stability 
             logpf_posterior = logpf_posterior * scale_factor
@@ -366,11 +365,6 @@ class ProteinRTBModel(nn.Module):
             print("logpf_prior: ", logpf_prior.mean().item())
             print("logr_x_prime: ", logr_x_prime.mean().item())
             print("logZ: ", self.logZ.item())
-
-            print("batch nums: ")
-            print("batch logpf_posterior: ", logpf_posterior)
-            print("batch logpf_prior: ", logpf_prior)
-            print("batch logr_x_prime: ", logr_x_prime)
 
             rtb_loss = 0.5 * (((logpf_posterior + self.logZ - logpf_prior - self.beta * logr_x_prime) ** 2) - learning_cutoff).relu()
 
@@ -400,7 +394,13 @@ class ProteinRTBModel(nn.Module):
                 batch_size=B
             )
 
-        return rtb_loss, logr_x_prime
+        return {
+            'loss': rtb_loss,
+            'logr': logr_x_prime,
+            'logpf_posterior': logpf_posterior,
+            'logpf_prior': logpf_prior,
+            'x': rwd_logs['x']
+        }
 
     def dsm_loss(self, x0, t):
         B = x0.shape[0]
@@ -610,7 +610,8 @@ class ProteinRTBModel(nn.Module):
             for j in range(num_it):
                 print("Repeat vals: ", j)
                 optimizer.zero_grad()
-                loss, logr = self.batched_rtb(shape=shape, prior_sample=prior_traj, rb_sample=rb_traj)
+                batch_logs = self.batched_rtb(shape=shape, prior_sample=prior_traj, rb_sample=rb_traj)
+                loss, logr = batch_logs['loss'], batch_logs['logr']
 
                 self.running_dist = torch.FloatTensor(self.running_dist[-(len(self.prior_model.batch_arr)-len(logr)):].tolist() + logr.detach().cpu().tolist())
 
@@ -643,12 +644,21 @@ class ProteinRTBModel(nn.Module):
                     logs = {"loss": loss.mean().item(),
                             "logZ": self.logZ.detach().cpu().numpy(),
                             "log_r": logr.mean().item(),
+                            "pf_divergence": (batch_logs['logpf_posterior'] - batch_logs['logpf_prior']).sum().detach().cpu().numpy(),
                             "gnorm": gnorm,
                             "epoch": it}
 
                     if not it % 20 == 0:
-                        dist_logs = compare_distributions(self.prior_model.target_dist.detach().cpu(), self.running_dist.detach().cpu())
-                        logs.update(dist_logs)
+                        logs.update(compare_distributions(
+                            self.prior_model.target_dist['log_r'].detach().cpu(),
+                            self.running_dist.detach().cpu())
+                        )
+                        logs.update(plot_xyz_distributions(
+                            xyz=batch_logs['x'],
+                            n_plots=4,  # Show 4 comparison columns
+                            target_dist=self.prior_model.target_dist['x']
+                        ))
+
 
                     wandb.log(logs)
 

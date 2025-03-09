@@ -131,7 +131,11 @@ class Amber14Reward(nn.Module):
         t1 = time()
         print(f"elapsed {t1 - t0}")
 
-        return -torch.FloatTensor(energies)
+        return {
+            'log_r': -torch.FloatTensor(energies),
+            'x': traj.xyz
+        }
+
 
     # def forward(self, sequence, data_path, tmp_dir='../samples/'):
     #     t0 = time()
