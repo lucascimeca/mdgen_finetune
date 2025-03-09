@@ -1,4 +1,5 @@
 import os
+import matplotlib.pyplot as plt
 
 from rtb_utils.plot_utils import compare_distributions, plot_xyz_distributions
 
@@ -659,9 +660,9 @@ class ProteinRTBModel(nn.Module):
                             target_dist=self.prior_model.target_dist['x']
                         ))
 
-
                     wandb.log(logs)
 
+                    plt.close('all')
                     # save model and optimizer state
                     self.save_checkpoint(self.model, optimizer, it, run_name)
 

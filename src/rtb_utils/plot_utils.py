@@ -107,16 +107,13 @@ def plot_xyz_distributions(xyz, n_plots, target_dist):
             # Add legend so user can see which distribution is which
             ax.legend()
 
-    # Log to wandb
-    wandb.log({
+    return {
         "xyz_distributions": wandb.Image(fig),
         "xyz_median_emd": np.median([wasserstein_distance(target_np, d)
-                                 for d in [x_data, y_data, z_data]]),
+                                     for d in [x_data, y_data, z_data]]),
         "xyz_median_jsd": np.median([js_divergence(target_np, d)
-                                 for d in [x_data, y_data, z_data]])
-    })
-
-    plt.close(fig)
+                                     for d in [x_data, y_data, z_data]])
+    }
 
 
 
