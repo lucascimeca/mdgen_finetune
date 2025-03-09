@@ -132,7 +132,7 @@ class Amber14Reward(nn.Module):
         print(f"elapsed {t1 - t0}")
 
         return {
-            'log_r': -torch.FloatTensor(energies),
+            'log_r': -torch.FloatTensor(energies)/10000,
             'x': traj.xyz
         }
 
