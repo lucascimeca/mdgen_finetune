@@ -70,8 +70,11 @@ def plot_xyz_distributions(xyz, n_plots, target_dist):
         target_dist: Reference distribution to compare against
     """
     # Convert to numpy (if needed) and extract coordinates
-    if not isinstance(xyz, np.array):
-        xyz_np = xyz.cpu().numpy()  # If xyz is already NumPy, this is a no-op
+    if not isinstance(xyz, np.ndarray):
+        xyz_np = xyz.cpu().numpy()
+    else:
+        xyz_np = xyz
+    # If xyz is already NumPy, this is a no-op
     x_data = xyz_np[..., 0].flatten()
     y_data = xyz_np[..., 1].flatten()
     z_data = xyz_np[..., 2].flatten()

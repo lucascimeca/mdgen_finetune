@@ -998,7 +998,7 @@ class ProteinRTBModel(nn.Module):
                 f"| scale ~ {x.std().item():.1e}")
 
             if backward:
-                g = self.sde.diffusion(t, x)
+                g = self.sde.diffusion(t, x, np.abs(dt))
                 std = g * (np.abs(dt)) ** (1 / 2)
                 x_prev = x.detach()
                 x = x + self.sde.drift(t, x, np.abs(dt)) + std * torch.randn_like(x)
@@ -1226,7 +1226,7 @@ class ProteinRTBModel(nn.Module):
         steps = list(range(len(traj)))
         steps = [step for step in steps[:-1] if step not in no_grad_steps]
 
-        for i, batch_steps in enumerate(utils.create_batches(steps, traj_batch)):
+        for i, batch_steps in enumerate(create_batches(steps, traj_batch)):
 
             # pbar.set_description(f"Sampling from the posterior | batch = {i}/{int(len(steps)//batch_size)} - {i*100/len(steps)//batch_size:.2f}%")
 
