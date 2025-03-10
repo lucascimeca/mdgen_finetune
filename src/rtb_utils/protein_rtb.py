@@ -355,6 +355,7 @@ class ProteinRTBModel(nn.Module):
             if not rb_sample:
                 rwd_logs = self.log_reward(x_mean_posterior)
                 logr_x_prime = rwd_logs['log_r'].to(self.device)
+                x_1 = rwd_logs['x']
 
             # for off policy stability 
             logpf_posterior = logpf_posterior * scale_factor
@@ -400,7 +401,7 @@ class ProteinRTBModel(nn.Module):
             'logr': logr_x_prime,
             'logpf_posterior': logpf_posterior,
             'logpf_prior': logpf_prior,
-            'x': rwd_logs['x']
+            'x': x_1
         }
 
     def dsm_loss(self, x0, t):

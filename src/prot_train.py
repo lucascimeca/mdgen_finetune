@@ -29,6 +29,7 @@ parser.add_argument('--tb', default=False, type=strtobool, help='Whether to use 
 parser.add_argument('--n_iters', default=50000, type=int, metavar='N', help='Number of training iterations')
 parser.add_argument('-bs', '--batch_size', type=int, default=64, help="Training Batch Size.")
 parser.add_argument('--num_test_samples', type=int, default=64, help="Test Batch Size.")
+parser.add_argument('--num_target_confs', type=int, default=300, help="Test Batch Size.")
 parser.add_argument('--loss_batch_size', type=int, default=-1, help="Batched RTB loss batch size")
 parser.add_argument('--lr', '--learning_rate', default=5e-5, type=float, help='Initial learning rate.')
 parser.add_argument('--peptide', type=str, default='FLRH', help='Peptide sequence.')
@@ -89,7 +90,7 @@ prior_model = MDGenSimulator(
     split=f'{args.splits_path}4AA_test.csv',
     num_rollouts=1,
     num_frames=1,
-    retain=300,
+    retain=args.num_target_confs,
     xtc=True,
     out_dir=args.save_path,
     suffix='_i100'
