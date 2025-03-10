@@ -42,5 +42,5 @@ unset CUDA_VISIBLE_DEVICES
 
 python ../prot_train.py --diffusion_steps 20 --save_path ~/scratch/mdgen/samples/ \
                         --data_path ~/scratch/mdgen/data/ --splits_path ../../splits/ \
-                        --load_path ../../pretrained/ --tb False --learning_rate 1e-4 --tb True \
+                        --load_path ../../pretrained/ --tb False --learning_rate 1e-4 \
                         --beta_start $1 --replay_buffer_prob .1 --replay_buffer uniform --wandb_track True
