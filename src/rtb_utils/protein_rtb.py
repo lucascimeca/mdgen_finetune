@@ -613,7 +613,8 @@ class ProteinRTBModel(nn.Module):
                 )
                 loss, logr = batch_logs['loss'], batch_logs['logr']
 
-                self.running_dist = torch.FloatTensor(self.running_dist[-(len(self.prior_model.batch_arr)-len(logr)):].tolist() + logr.detach().cpu().tolist())
+                # self.running_dist = torch.FloatTensor(self.running_dist[-(len(self.prior_model.batch_arr)-len(logr)):].tolist() + logr.detach().cpu().tolist())
+                self.running_dist = logr.detach().cpu()
 
                 if clip > 0:
                     v_g = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=clip)
