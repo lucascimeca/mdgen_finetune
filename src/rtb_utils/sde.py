@@ -12,6 +12,7 @@ class VPSDE():
         T: float = 1.0,
         epsilon: float = 1e-5,
         beta_schedule: str = 'linear',  # Added beta_schedule parameter
+        orig_scale: float = 1.,
         **kwargs
     ):
         super().__init__()
@@ -22,6 +23,7 @@ class VPSDE():
         self.beta_min = beta_min
         self.beta_max = beta_max
         self.beta_schedule = beta_schedule  # Store the schedule type
+        self.orig_scale = orig_scale
 
     def beta(self, t: Tensor):
         if self.beta_schedule == 'linear':
@@ -40,7 +42,7 @@ class VPSDE():
         
     def prior(self, shape):
         mu = torch.zeros(shape).to(self.device)
-        return Independent(Normal(loc=mu, scale=1., validate_args=False), len(shape))
+        return Independent(Normal(loc=mu, scale=self.orig_scale, validate_args=False), len(shape))
 
     def diffusion(self, t: Tensor, x: Tensor) -> Tensor:
         _, *D = x.shape
@@ -78,6 +80,7 @@ class DDPM():
         T: float = 1.0,
         epsilon: float = 1e-5,
         beta_schedule: str = 'linear',  # Added beta_schedule parameter
+        orig_scale: float = 1.,
         **kwargs
     ):
         super().__init__()
@@ -88,6 +91,7 @@ class DDPM():
         self.beta_min = beta_min
         self.beta_max = beta_max
         self.beta_schedule = beta_schedule  # Store the schedule type
+        self.orig_scale = orig_scale
 
     def beta(self, t: Tensor):
         if self.beta_schedule == 'linear':
@@ -106,7 +110,7 @@ class DDPM():
         
     def prior(self, shape):
         mu = torch.zeros(shape).to(self.device)
-        return Independent(Normal(loc=mu, scale=1., validate_args=False), len(shape))
+        return Independent(Normal(loc=mu, scale=self.orig_scale, validate_args=False), len(shape))
 
     def diffusion(self, t: Tensor, x: Tensor, dt: Tensor) -> Tensor:
         _, *D = x.shape

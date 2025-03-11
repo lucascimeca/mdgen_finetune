@@ -44,6 +44,7 @@ parser.add_argument('--beta_start', default=1.0, type=float, help='Initial Inver
 parser.add_argument('--beta_end', default=10.0, type=float, help='Final Inverse temperature for reward')
 parser.add_argument('--anneal', default=False, type=strtobool, help='Whether to anneal beta (From beta_start to beta_end)')
 parser.add_argument('--anneal_steps', default=15000, type=int, help="Number of steps for temperature annealing")
+parser.add_argument('--orig_scale', default=1.0, type=float, help='STD of the gaussian at x_0.')
 
 parser.add_argument('--save_path', default='~/scratch/CNF_RTB_ckpts/', type=str, help='Path to save model checkpoints')
 parser.add_argument('--load_ckpt', default=False, type=strtobool, help='Whether to load checkpoint')
@@ -124,6 +125,7 @@ rtb_model = protein_rtb.ProteinRTBModel(
     beta_end=args.beta_end,
     loss_batch_size=args.loss_batch_size,
     replay_buffer=replay_buffer,
+    orig_scale=args.orig_scale,
     config=args
 )
 
@@ -142,6 +144,5 @@ rtb_model.finetune(shape=(args.batch_size, *in_shape),
                    clip=args.clip,
                    prior_sample_prob=args.prior_sample_prob,
                    replay_buffer_prob=args.replay_buffer_prob,
-                   num_test_samples=args.num_test_samples,
                    anneal=args.anneal,
                    anneal_steps=args.anneal_steps)

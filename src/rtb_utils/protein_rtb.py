@@ -44,6 +44,7 @@ class ProteinRTBModel(nn.Module):
                  beta_end=10.0,
                  loss_batch_size=64,
                  replay_buffer=None,
+                 orig_scale=1.,
                  config={}
                  ):
         super().__init__()
@@ -52,9 +53,17 @@ class ProteinRTBModel(nn.Module):
         self.config = config
 
         if inference_type == 'vpsde':
-            self.sde = VPSDE(device=self.device, beta_schedule='cosine')
+            self.sde = VPSDE(
+                device=self.device,
+                beta_schedule='cosine',
+                orig_scale=orig_scale
+            )
         else:
-            self.sde = DDPM(device=self.device, beta_schedule='cosine')
+            self.sde = DDPM(
+                device=self.device,
+                beta_schedule='cosine',
+                orig_scale=orig_scale
+            )
         self.sde_type = self.sde.sde_type
 
         self.steps = diffusion_steps
@@ -307,7 +316,7 @@ class ProteinRTBModel(nn.Module):
             rwd_logs = self.reward_model(self.prior_model.peptide, data_path=self.config.data_path, tmp_dir=self.prior_model.out_dir)
         return rwd_logs
 
-    def batched_rtb(self, shape, learning_cutoff=.1, prior_sample=False, rb_sample=False):
+    def batched_rtb(self, shape, learning_cutoff=.1, prior_sample=False, rb_sample=False, orig_scale=1.):
         # first pas through, get trajectory & loss for correction
         B, *D = shape
         x_1 = None
@@ -530,15 +539,14 @@ class ProteinRTBModel(nn.Module):
         return
 
     def finetune(self, shape, n_iters=100000, learning_rate=5e-5, clip=0.1, wandb_track=False, prior_sample_prob=0.0,
-                 replay_buffer_prob=0.0, anneal=False, anneal_steps=15000, num_test_samples=1):
-        B, *D = shape
+                 replay_buffer_prob=0.0, anneal=False, anneal_steps=15000):
 
         param_list = [{'params': self.model.parameters()}]
         optimizer = torch.optim.Adam(param_list, lr=learning_rate)
         run_name = self.id + '_sde_' + self.sde_type + '_steps_' + str(self.steps) + '_lr_' + str(
             learning_rate) + '_beta_start_' + str(self.beta_start) + '_beta_end_' + str(
             self.beta_end) + '_anneal_' + str(anneal) + '_prior_prob_' + str(prior_sample_prob) + '_rb_prob_' + str(
-            replay_buffer_prob) + '_clip_' + str(clip) + f'_{datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}'
+            replay_buffer_prob) + '_clip_' + str(clip) + '_tb_' + str(self.tb) + f'_{datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}'
 
         self.tmp_dir = os.path.expanduser("~/scratch/CNF_tmp/" + run_name + '/')
         self.running_dist = torch.FloatTensor([])
@@ -577,21 +585,7 @@ class ProteinRTBModel(nn.Module):
                 "load ckpt path": self.load_ckpt_path
             }
             wandb.config.update(hyperparams)
-            # with torch.no_grad():
-            #     if hasattr(self.reward_model, 'protein_type'):
-            #         x = self.prior_model.sample()
-            #         print("x: ", x)
-            #         # print("prior sample x shape: ", x.shape)
-            #     else:
-            #         x = torch.randn(num_test_samples, *self.in_shape, device=self.device)
-            #     img = self.prior_model(x)
-            #     prior_reward = self.reward_model(img, tmp_dir=self.tmp_dir)
-            # if not protein_type:
-            #     wandb.log({"prior_samples": [wandb.Image(img[k], caption=prior_reward[k]) for k in range(len(img))]})
-            # else:
-            #     imgs_pil = self.reward_model.get_prot_image(img, tmp_dir=self.tmp_dir)
-            #     wandb.log({"prior_samples": [wandb.Image(imgs_pil[k], caption=prior_reward[k]) for k in
-            #                                  range(len(imgs_pil))]})
+
         for it in range(load_it, n_iters):
             prior_traj = False
             rb_traj = False
@@ -612,7 +606,11 @@ class ProteinRTBModel(nn.Module):
             for j in range(num_it):
                 print("Repeat vals: ", j)
                 optimizer.zero_grad()
-                batch_logs = self.batched_rtb(shape=shape, prior_sample=prior_traj, rb_sample=rb_traj)
+                batch_logs = self.batched_rtb(
+                    shape=shape,
+                    prior_sample=prior_traj,
+                    rb_sample=rb_traj
+                )
                 loss, logr = batch_logs['loss'], batch_logs['logr']
 
                 self.running_dist = torch.FloatTensor(self.running_dist[-(len(self.prior_model.batch_arr)-len(logr)):].tolist() + logr.detach().cpu().tolist())
