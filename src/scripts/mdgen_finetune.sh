@@ -44,4 +44,4 @@ python ../prot_train.py --diffusion_steps 20 --batch_size 32 --save_path ~/scrat
                         --data_path ~/scratch/mdgen/data/ --splits_path ../../splits/ \
                         --load_path ../../pretrained/ --tb False --learning_rate 1e-5  --inference ddpm \
                         --beta_start $1 --loss_batch_size 32 --replay_buffer_prob .2 \
-                        --clip 0.05 --orig_scale 20 --replay_buffer reward --wandb_track True
+                        --clip 0.05 --orig_scale 10 --replay_buffer uniform --wandb_track True
