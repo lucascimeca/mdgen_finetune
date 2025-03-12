@@ -129,17 +129,22 @@ rtb_model = protein_rtb.ProteinRTBModel(
     config=args
 )
 
+for i in range(len(prior_model.target_dist['x'])):
+    rtb_model.replay_buffer.add(
+        torch.FloatTensor(prior_model.target_dist['x'][i]),
+        torch.FloatTensor([prior_model.target_dist['log_r'][i]]),
+        torch.FloatTensor([0.])
+    )
+
 if args.langevin:
     rtb_model.pretrain_trainable_reward(
         n_iters=20,
         batch_size=args.batch_size,
-        learning_rate=args.lr,
-        wandb_track=False
+        learning_rate=args.lr
     )
 
 rtb_model.finetune(shape=(args.batch_size, *in_shape),
                    n_iters=args.n_iters,
-                   wandb_track=args.wandb_track,
                    learning_rate=args.lr,
                    clip=args.clip,
                    prior_sample_prob=args.prior_sample_prob,

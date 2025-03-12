@@ -120,15 +120,8 @@ class DDPM():
     def drift(self, t: Tensor, x: Tensor, dt: Tensor) -> Tensor:
         _, *D = x.shape
         beta = self.beta(t)/self.beta_max
-        
-        #print("dt: ", dt)
-        #print("beta: ", beta)
-        #print("beta: ", beta * dt)
-        #print("1 - beta*dt", 1.0 - beta*dt)
+
         coeff = torch.sqrt(1.0 - beta*dt).view(-1, *[1]*len(D))
-        
-        #print("\nbeta(t): ", self.beta(t))
-        #print("coeff: ", coeff)
 
         return (coeff - 1.0) * x   
         #return -0.5 * self.beta(t).view(-1, *[1]*len(D)) * x

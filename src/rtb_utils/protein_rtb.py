@@ -76,6 +76,8 @@ class ProteinRTBModel(nn.Module):
         self.replay_buffer = replay_buffer
         self.use_rb = False if replay_buffer is None else True
 
+        self.wandb_track = config.wandb_track
+
         # for run name
         self.id = id
         self.entity = entity
@@ -128,8 +130,6 @@ class ProteinRTBModel(nn.Module):
         for param in self.ref_model.parameters():
             param.requires_grad = False
 
-        self.ref_proc = True  # False
-
         # Prior flow model pipeline
         self.prior_model = prior_model
 
@@ -144,6 +144,22 @@ class ProteinRTBModel(nn.Module):
             self.load_ckpt_path = os.path.expanduser(load_ckpt_path)
         else:
             self.load_ckpt_path = load_ckpt_path
+
+        if self.wandb_track:
+            self.load_reference_kpis()
+
+
+    def load_reference_kpis(self):
+        # compute distribution change
+        if self.prior_model.target_dist is None:
+            print("data energy distribution has yet to be computed. Computing...")
+            # save all the frames from the actual data
+            self.prior_model.fix_and_save_pdbs(torch.FloatTensor(self.prior_model.batch_arr))
+            # save all the frames from the actual data
+            self.prior_model.target_dist = self.reward_model(self.prior_model.peptide,
+                                                             data_path=self.config.data_path,
+                                                             tmp_dir=self.prior_model.out_dir)
+            print("Done!")
 
     def model_and_shape(self, t, x):
         # will be [B, N, 7]
@@ -231,7 +247,7 @@ class ProteinRTBModel(nn.Module):
         self.cls_optimizer.step()
         return
 
-    def pretrain_trainable_reward(self, batch_size, n_iters=100, learning_rate=5e-5, wandb_track=False):
+    def pretrain_trainable_reward(self, batch_size, n_iters=100, learning_rate=5e-5):
         if not self.langevin:
             print("Trainable reward not initialized.")
             return
@@ -241,7 +257,7 @@ class ProteinRTBModel(nn.Module):
 
         run_name = self.id + '_pretrain_reward_lr_' + str(learning_rate)
 
-        if wandb_track:
+        if self.wandb_track:
             wandb.init(
                 project='mdgen_cfm_posterior',
                 entity=self.entity,
@@ -273,7 +289,7 @@ class ProteinRTBModel(nn.Module):
             loss.backward()
             self.cls_optimizer.step()
 
-            if wandb_track:
+            if self.wandb_track:
                 wandb.log({"loss": loss.item(), "iter": i})
                 if i % 100 == 0:
                     with torch.no_grad():
@@ -307,16 +323,20 @@ class ProteinRTBModel(nn.Module):
     def prior_log_prob(self, x):
         return self.latent_prior.log_prob(x).sum(dim=tuple(range(1, len(x.shape))))
 
-    def log_reward(self, x, from_prior=False, return_img=False):
+    def log_reward(self, x, from_prior=False):
         with torch.no_grad():
             if not from_prior:
                 self.prior_model.sample(zs0=x)
             else:
                 self.prior_model.sample()
-            rwd_logs = self.reward_model(self.prior_model.peptide, data_path=self.config.data_path, tmp_dir=self.prior_model.out_dir)
+            rwd_logs = self.reward_model(
+                self.prior_model.peptide,
+                data_path=self.config.data_path,
+                tmp_dir=self.prior_model.out_dir
+            )
         return rwd_logs
 
-    def batched_rtb(self, shape, learning_cutoff=.1, prior_sample=False, rb_sample=False, orig_scale=1.):
+    def batched_rtb(self, shape, learning_cutoff=.1, prior_sample=False, rb_sample=False):
         # first pas through, get trajectory & loss for correction
         B, *D = shape
         x_1 = None
@@ -325,7 +345,7 @@ class ProteinRTBModel(nn.Module):
 
         with torch.no_grad():
             # run whole trajectory, and get PFs
-            if self.sde_type == 'vpsde' and self.ref_proc:
+            if self.sde_type == 'vpsde' and not self.tb:
                 print("In batched RTB doing REF PROC")
                 fwd_logs = self.forward_ref_proc(
                     shape=shape,
@@ -455,12 +475,12 @@ class ProteinRTBModel(nn.Module):
 
         # do denoising score matching to pretrain gfn
 
-    def denoising_score_matching_unif(self, n_iters=1000, learning_rate=5e-5, clip=0.1, wandb_track=False):
+    def denoising_score_matching_unif(self, n_iters=1000, learning_rate=5e-5, clip=0.1):
         param_list = [{'params': self.model.parameters()}]
         optimizer = torch.optim.Adam(param_list, lr=learning_rate)
         run_name = 'DSM_unif_' + "unet_type" + self.id  # + '_sde_' + self.sde_type +'_steps_' + str(self.steps) + '_lr_' + str(learning_rate)
 
-        if wandb_track:
+        if self.wandb_track:
             wandb.init(
                 project='mdgen_cfm_posterior',
                 entity=self.entity,
@@ -514,31 +534,12 @@ class ProteinRTBModel(nn.Module):
                 wandb.log({"loss": loss.item(), "epoch": it})
 
             if it % 100 == 0:
-                if self.ref_proc:
-                    fwd_logs = self.forward_ref_proc(
-                        shape=(100, *self.in_shape),
-                        steps=20,
-                        save_traj=True,  # save trajectory fwd
-                        prior_sample=False,
-                        x_1=None,
-                        backward=False
-                    )
-                else:
-                    fwd_logs = self.forward(
-                        shape=(100, *self.in_shape),
-                        steps=20,
-                        save_traj=True,  # save trajectory fwd
-                        prior_sample=False,
-                        x_1=None,
-                        backward=False
-                    )
-
                 wandb.log({"loss": loss.item(), "epoch": it})
                 self.save_checkpoint(self.model, optimizer, it, run_name)
 
         return
 
-    def finetune(self, shape, n_iters=100000, learning_rate=5e-5, clip=0.1, wandb_track=False, prior_sample_prob=0.0,
+    def finetune(self, shape, n_iters=100000, learning_rate=5e-5, clip=0.1, prior_sample_prob=0.0,
                  replay_buffer_prob=0.0, anneal=False, anneal_steps=15000):
 
         param_list = [{'params': self.model.parameters()}]
@@ -565,7 +566,7 @@ class ProteinRTBModel(nn.Module):
         else:
             load_it = 0
 
-        if wandb_track:
+        if self.wandb_track:
             wandb.init(
                 project='mdgen_cfm_posterior',
                 entity=self.entity,
@@ -591,6 +592,7 @@ class ProteinRTBModel(nn.Module):
             rb_traj = False
             rand_n = np.random.uniform()
             # No replay buffer for first 10 iters
+            # todo uncomment
             if rand_n < prior_sample_prob:
                 prior_traj = True
             elif (it - load_it) > 5 and rand_n < prior_sample_prob + replay_buffer_prob:
@@ -629,18 +631,7 @@ class ProteinRTBModel(nn.Module):
                     x_1, logr_x_prime = self.replay_buffer.sample(shape[0])
                     self.update_trainable_reward(x_1)
 
-                if wandb_track:
-
-                    # compute distribution change
-                    if self.prior_model.target_dist is None:
-                        print("data energy distribution has yet to be computed. Computing...")
-                        # save all the frames from the actual data
-                        self.prior_model.fix_and_save_pdbs(torch.FloatTensor(self.prior_model.batch_arr))
-                        # save all the frames from the actual data
-                        self.prior_model.target_dist = self.reward_model(self.prior_model.peptide,
-                                                                         data_path=self.config.data_path,
-                                                                         tmp_dir=self.prior_model.out_dir)
-                        print("Done!")
+                if self.wandb_track:
 
                     logs = {"loss": loss.mean().item(),
                             "logZ": self.logZ.detach().cpu().numpy(),
@@ -705,9 +696,7 @@ class ProteinRTBModel(nn.Module):
         # if not isinstance(condition, (list, tuple)):
         #     raise ValueError(f"condition must be a list or tuple or torch.Tensor, received {type(condition)}")
         B, *D = shape
-        sampling_from = "prior" if likelihood_score_fn is None else "posterior"
-        if likelihood_score_fn is None:
-            likelihood_score_fn = lambda t, x: 0.
+        sampling_from = "prior" if prior_sample  is None else "posterior"
 
         if backward:
             x = x_1
@@ -750,11 +739,11 @@ class ProteinRTBModel(nn.Module):
             lp_correction = self.get_langevin_correction(x)
 
             posterior_drift = -self.sde.drift(t, x) - (g ** 2) * (
-                        self.model_and_shape(t, x) + lp_correction) / self.sde.sigma(t).view(-1, *[1] * len(D))
+                        self.model_and_shape(t, x) + lp_correction
+            ) / self.sde.sigma(t).view(-1, *[1] * len(D))
 
-            f_posterior = posterior_drift
             # compute parameters for denoising step (wrt posterior)
-            x_mean_posterior = x + f_posterior * dt  # * (-1.0 if backward else 1.0)
+            x_mean_posterior = x + posterior_drift * dt  # * (-1.0 if backward else 1.0)
             std = g * (np.abs(dt)) ** (1 / 2)
 
             # compute step
@@ -834,10 +823,7 @@ class ProteinRTBModel(nn.Module):
         # if not isinstance(condition, (list, tuple)):
         #     raise ValueError(f"condition must be a list or tuple or torch.Tensor, received {type(condition)}")
         B, *D = shape
-        sampling_from = "prior" if likelihood_score_fn is None else "posterior"
-
-        if likelihood_score_fn is None:
-            likelihood_score_fn = lambda t, x: 0.
+        sampling_from = "prior" if prior_sample is None else "posterior"
 
         if backward:
             x = x_1
@@ -879,12 +865,10 @@ class ProteinRTBModel(nn.Module):
 
             # lp_correction = self.get_langevin_correction(x)
 
-            posterior_drift = -self.sde.drift(t, x) - (g ** 2) * (self.model_and_shape(t, x)) / self.sde.sigma(t).view(
-                -1, *[1] * len(D))
+            posterior_drift = -self.sde.drift(t, x) - (g ** 2) * (self.model_and_shape(t, x)) / self.sde.sigma(t).view(-1, *[1] * len(D))
 
-            f_posterior = posterior_drift
             # compute parameters for denoising step (wrt posterior)
-            x_mean_posterior = x + f_posterior * dt  # * (-1.0 if backward else 1.0)
+            x_mean_posterior = x + posterior_drift * dt  # * (-1.0 if backward else 1.0)
             std = g * (np.abs(dt)) ** (1 / 2)
 
             # compute step
@@ -905,8 +889,7 @@ class ProteinRTBModel(nn.Module):
                 pb_drift = ref_drift  # -self.sde.drift(t, x)
                 x_mean_pb = x + pb_drift * (dt)
             else:
-                ref_drift = -self.sde.drift(t, x_prev) - (g ** 2) * (
-                    self.ref_model_and_shape(t, x_prev)) / self.sde.sigma(t).view(-1, *[1] * len(D))
+                ref_drift = -self.sde.drift(t, x_prev) - (g ** 2) * (self.ref_model_and_shape(t, x_prev)) / self.sde.sigma(t).view(-1, *[1] * len(D))
                 pb_drift = ref_drift  # -self.sde.drift(t, x_prev)
                 x_mean_pb = x_prev + pb_drift * (dt)
             # x_mean_pb = x_prev + pb_drift * (dt)
@@ -946,7 +929,6 @@ class ProteinRTBModel(nn.Module):
             shape,
             steps,
             condition: list = [],
-            likelihood_score_fn=None,
             guidance_factor=0.,
             detach_freq=0.0,
             backward=False,
@@ -967,9 +949,7 @@ class ProteinRTBModel(nn.Module):
         # if not isinstance(condition, (list, tuple)):
         #     raise ValueError(f"condition must be a list or tuple or torch.Tensor, received {type(condition)}")
         B, *D = shape
-        sampling_from = "prior" if likelihood_score_fn is None else "posterior"
-        if likelihood_score_fn is None:
-            likelihood_score_fn = lambda t, x: 0.
+        sampling_from = "prior" if prior_sample else "posterior"
 
         if backward:
             x = x_1
@@ -984,7 +964,7 @@ class ProteinRTBModel(nn.Module):
                                                  torch.ones((B,) + tuple(D), device=self.device))
 
         logpf_posterior = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
-        logpb = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
+        logpf_prior = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
         dt = -1 / (steps + 1)
 
         #####
@@ -1000,7 +980,7 @@ class ProteinRTBModel(nn.Module):
                 g = self.sde.diffusion(t, x, np.abs(dt))
                 std = g * (np.abs(dt)) ** (1 / 2)
                 x_prev = x.detach()
-                x = x + self.sde.drift(t, x, np.abs(dt)) + std * torch.randn_like(x)
+                x = x - self.sde.drift(t, x, np.abs(dt)) + std * torch.randn_like(x)
             else:
                 x_prev = x.detach()
 
@@ -1011,8 +991,7 @@ class ProteinRTBModel(nn.Module):
             std = self.sde.diffusion(t, x, np.abs(dt))
 
             lp_correction = self.get_langevin_correction(x)
-            posterior_drift = self.sde.drift(t, x, np.abs(dt)) + self.model_and_shape(t,
-                                                                                      x) + lp_correction  # / self.sde.sigma(t).view(-1, *[1]*len(D))
+            posterior_drift = self.sde.drift(t, x, np.abs(dt)) + self.model_and_shape(t, x) + lp_correction  # / self.sde.sigma(t).view(-1, *[1]*len(D))
             f_posterior = posterior_drift
             # compute parameters for denoising step (wrt posterior)
             x_mean_posterior = x + f_posterior
@@ -1028,28 +1007,31 @@ class ProteinRTBModel(nn.Module):
             # compute parameters for pb
             # t_next = t + dt
             # pb_drift = self.sde.drift(t_next, x)
-            # x_mean_pb = x + pb_drift * (-dt)
+            # x_mean_prior = x + pb_drift * (-dt)
             if backward:
                 pb_drift = self.sde.drift(t, x, np.abs(dt))
             else:
                 pb_drift = self.sde.drift(t, x_prev, np.abs(dt))
-            x_mean_pb = x_prev + pb_drift
+            x_mean_prior = x_prev + pb_drift
             pb_std = self.sde.diffusion(t, x_prev, np.abs(dt))  # g * (np.abs(dt)) ** (1 / 2)
 
             if save_traj:
                 traj.append(x.clone())
 
             pf_post_dist = torch.distributions.Normal(x_mean_posterior, std)
-            pb_dist = torch.distributions.Normal(x_mean_pb, pb_std)
+            pf_prior_dist = torch.distributions.Normal(x_mean_prior, pb_std)
 
             # compute log-likelihoods of reached pos wrt to prior & posterior models
-            # logpb += pb_dist.log_prob(x_prev).sum(tuple(range(1, len(x.shape))))
+            # logpf_prior += pb_dist.log_prob(x_prev).sum(tuple(range(1, len(x.shape))))
             if backward:
-                logpb += pb_dist.log_prob(x_prev).sum(tuple(range(1, len(x.shape))))
+                logpf_prior += pf_prior_dist.log_prob(x_prev).sum(tuple(range(1, len(x.shape))))
                 logpf_posterior += pf_post_dist.log_prob(x_prev).sum(tuple(range(1, len(x.shape))))
             else:
-                logpb += pb_dist.log_prob(x).sum(tuple(range(1, len(x.shape))))
                 logpf_posterior += pf_post_dist.log_prob(x).sum(tuple(range(1, len(x.shape))))
+                if self.tb:
+                    logpf_prior += pf_prior_dist.log_prob(x_prev).sum(tuple(range(1, len(x.shape))))
+                else:
+                    logpf_prior += pf_prior_dist.log_prob(x).sum(tuple(range(1, len(x.shape))))
 
             if torch.any(torch.isnan(x)):
                 print("Diffusion is not stable, NaN were produced. Stopped sampling.")
@@ -1059,7 +1041,7 @@ class ProteinRTBModel(nn.Module):
             traj = list(reversed(traj))
         logs = {
             'x_mean_posterior': x,  # ,x_mean_posterior,
-            'logpf_prior': logpb,
+            'logpf_prior': logpf_prior,
             'logpf_posterior': logpf_posterior,
             'traj': traj if save_traj else None
         }
