@@ -145,18 +145,6 @@ class ProteinRTBModel(nn.Module):
         else:
             self.load_ckpt_path = load_ckpt_path
 
-    def load_reference_kpis(self):
-        # compute target distribution to visualize match
-        if self.prior_model.target_dist is None:
-            print("data energy distribution has yet to be computed. Computing...")
-            # save all the frames from the actual data
-            self.prior_model.fix_and_save_pdbs(torch.FloatTensor(self.prior_model.batch_arr))
-            # save all the frames from the actual data
-            self.prior_model.target_dist = self.reward_model(self.prior_model.peptide,
-                                                             data_path=self.config.data_path,
-                                                             tmp_dir=self.prior_model.out_dir)
-            print("Done!")
-
     def model_and_shape(self, t, x):
         # will be [B, N, 7]
         # print("input x.shape: ", x.shape)
@@ -288,8 +276,6 @@ class ProteinRTBModel(nn.Module):
             if self.wandb_track:
                 wandb.log({"loss": loss.item(), "iter": i})
                 if i % 100 == 0:
-
-                    self.load_reference_kpis()
 
                     with torch.no_grad():
                         x = torch.randn(20, *self.in_shape, device=self.device)
@@ -630,7 +616,18 @@ class ProteinRTBModel(nn.Module):
                     x_1, logr_x_prime = self.replay_buffer.sample(shape[0])
                     self.update_trainable_reward(x_1)
 
-                if self.wandb_track:
+                if wandb_track:
+
+                    # compute distribution change
+                    if self.prior_model.target_dist is None:
+                        print("data energy distribution has yet to be computed. Computing...")
+                        # save all the frames from the actual data
+                        self.prior_model.fix_and_save_pdbs(torch.FloatTensor(self.prior_model.batch_arr))
+                        # save all the frames from the actual data
+                        self.prior_model.target_dist = self.reward_model(self.prior_model.peptide,
+                                                                         data_path=self.config.data_path,
+                                                                         tmp_dir=self.prior_model.out_dir)
+                        print("Done!")
 
                     logs = {"loss": loss.mean().item(),
                             "logZ": self.logZ.detach().cpu().numpy(),
