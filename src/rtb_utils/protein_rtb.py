@@ -148,9 +148,8 @@ class ProteinRTBModel(nn.Module):
         if self.wandb_track:
             self.load_reference_kpis()
 
-
     def load_reference_kpis(self):
-        # compute distribution change
+        # compute target distribution to visualize match
         if self.prior_model.target_dist is None:
             print("data energy distribution has yet to be computed. Computing...")
             # save all the frames from the actual data

@@ -129,12 +129,12 @@ rtb_model = protein_rtb.ProteinRTBModel(
     config=args
 )
 
-for i in range(len(prior_model.target_dist['x'])):
-    rtb_model.replay_buffer.add(
-        torch.FloatTensor(prior_model.target_dist['x'][i]),
-        torch.FloatTensor([prior_model.target_dist['log_r'][i]]),
-        torch.FloatTensor([0.])
-    )
+# for i in range(len(prior_model.target_dist['x'])):
+#     rtb_model.replay_buffer.add(
+#         torch.FloatTensor(prior_model.target_dist['x'][i]),
+#         torch.FloatTensor([prior_model.target_dist['log_r'][i]]),
+#         torch.FloatTensor([0.])
+#     )
 
 if args.langevin:
     rtb_model.pretrain_trainable_reward(
