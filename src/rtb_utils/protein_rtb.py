@@ -145,9 +145,6 @@ class ProteinRTBModel(nn.Module):
         else:
             self.load_ckpt_path = load_ckpt_path
 
-        if self.wandb_track:
-            self.load_reference_kpis()
-
     def load_reference_kpis(self):
         # compute target distribution to visualize match
         if self.prior_model.target_dist is None:
@@ -291,6 +288,9 @@ class ProteinRTBModel(nn.Module):
             if self.wandb_track:
                 wandb.log({"loss": loss.item(), "iter": i})
                 if i % 100 == 0:
+
+                    self.load_reference_kpis()
+
                     with torch.no_grad():
                         x = torch.randn(20, *self.in_shape, device=self.device)
                         img = self.prior_model(x)
