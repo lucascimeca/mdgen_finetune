@@ -592,7 +592,7 @@ class ProteinRTBModel(nn.Module):
             rb_traj = False
             rand_n = np.random.uniform()
             # No replay buffer for first 10 iters
-            # todo uncomment
+
             if rand_n < prior_sample_prob:
                 prior_traj = True
             elif (it - load_it) > 5 and rand_n < prior_sample_prob + replay_buffer_prob:
