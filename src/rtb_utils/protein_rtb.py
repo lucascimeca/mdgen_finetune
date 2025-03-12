@@ -616,7 +616,7 @@ class ProteinRTBModel(nn.Module):
                     x_1, logr_x_prime = self.replay_buffer.sample(shape[0])
                     self.update_trainable_reward(x_1)
 
-                if wandb_track:
+                if self.wandb_track:
 
                     # compute distribution change
                     if self.prior_model.target_dist is None:
