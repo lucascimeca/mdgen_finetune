@@ -70,7 +70,13 @@ def plot_relative_distance_distributions(xyz, n_plots, target_dist, sample_size=
         target_dist: Reference distribution with same shape as xyz
         sample_size: Points to sample for distance calculations (kept low for efficiency)
     """
-    # Reshape and convert to numpy
+
+    # Convert to numpy (if needed) and extract coordinates
+    if not isinstance(xyz, np.ndarray):
+        xyz = xyz.cpu().numpy()
+    if not isinstance(target_dist, np.ndarray):
+        target_dist = target_dist.cpu().numpy()
+
     xyz_np = xyz.reshape(-1, 3)
     target_np = target_dist.reshape(-1, 3)
 
