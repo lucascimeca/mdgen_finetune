@@ -246,7 +246,8 @@ class ProteinRTBModel(nn.Module):
                 project='mdgen_cfm_posterior',
                 entity=self.entity,
                 save_code=True,
-                name=run_name
+                name=run_name,
+                config=self.config
             )
             hyperparams = {
                 "learning_rate": learning_rate,
@@ -470,7 +471,8 @@ class ProteinRTBModel(nn.Module):
                 project='mdgen_cfm_posterior',
                 entity=self.entity,
                 save_code=True,
-                name=run_name
+                name=run_name,
+                config=self.config
             )
             hyperparams = {
                 "learning_rate": learning_rate,
@@ -556,7 +558,8 @@ class ProteinRTBModel(nn.Module):
                 project='mdgen_cfm_posterior',
                 entity=self.entity,
                 save_code=True,
-                name=run_name
+                name=run_name,
+                config=self.config
             )
             hyperparams = {
                 "learning_rate": learning_rate,
