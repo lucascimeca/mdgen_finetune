@@ -1,7 +1,7 @@
 import os
 import matplotlib.pyplot as plt
 
-from rtb_utils.plot_utils import compare_distributions, plot_xyz_distributions
+from rtb_utils.plot_utils import compare_distributions, plot_relative_distance_distributions
 
 os.environ['PYMOL_QUIET'] = '1'
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
@@ -644,7 +644,7 @@ class ProteinRTBModel(nn.Module):
                             self.prior_model.target_dist['log_r'].detach().cpu(),
                             self.running_dist.detach().cpu())
                         )
-                        logs.update(plot_xyz_distributions(
+                        logs.update(plot_relative_distance_distributions(
                             xyz=batch_logs['x'],
                             n_plots=4,  # Show 4 comparison columns
                             target_dist=self.prior_model.target_dist['x']

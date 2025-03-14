@@ -62,61 +62,71 @@ def compare_distributions(dist1, dist2):
     }
 
 
-def plot_xyz_distributions(xyz, n_plots, target_dist):
+def plot_relative_distance_distributions(xyz, n_plots, target_dist, sample_size=100):
     """
     Args:
-        xyz: Tensor (or array) of shape (..., 3)
-        n_plots: Number of columns to show in the grid
-        target_dist: Reference distribution to compare against
+        xyz: Tensor/array of shape (..., 3)
+        n_plots: Number of comparison columns in grid
+        target_dist: Reference distribution with same shape as xyz
+        sample_size: Points to sample for distance calculations (kept low for efficiency)
     """
-    # Convert to numpy (if needed) and extract coordinates
-    if not isinstance(xyz, np.ndarray):
-        xyz_np = xyz.cpu().numpy()
-    else:
-        xyz_np = xyz
-    # If xyz is already NumPy, this is a no-op
-    x_data = xyz_np[..., 0].flatten()
-    y_data = xyz_np[..., 1].flatten()
-    z_data = xyz_np[..., 2].flatten()
-    target_np = target_dist.flatten()
+    # Reshape and convert to numpy
+    xyz_np = xyz.reshape(-1, 3)
+    target_np = target_dist.reshape(-1, 3)
 
-    # Create figure grid
     fig, axes = plt.subplots(3, n_plots, figsize=(4 * n_plots, 10))
-    plt.subplots_adjust(wspace=0.3, hspace=0.5)  # a little more vertical spacing
+    plt.subplots_adjust(wspace=0.3, hspace=0.5)
 
-    # Plot each coordinate row
-    for coord_idx, (coord_data, coord_name) in enumerate(zip(
-            [x_data, y_data, z_data], ['X', 'Y', 'Z']
-    )):
-        for plot_idx in range(n_plots):
+    # Cache for storing metrics
+    all_emd = {0: [], 1: [], 2: []}
+    all_jsd = {0: [], 1: [], 2: []}
+
+    for coord_idx in range(3):  # X/Y/Z rows
+        for plot_idx in range(n_plots):  # Columns
             ax = axes[coord_idx, plot_idx]
 
-            # Subsample data for multiple plots
-            subset = np.random.choice(
-                coord_data,
-                size=min(len(coord_data), 2000),  # Limit points for visibility
-                replace=False
-            )
+            # Randomly select points from both distributions
+            xyz_sample = xyz_np[np.random.choice(len(xyz_np), sample_size, replace=False)]
+            target_sample = target_np[np.random.choice(len(target_np), sample_size, replace=False)]
+
+            # Calculate coordinate-specific distances
+            xyz_dists = np.abs(xyz_sample[:, coord_idx, None] - xyz_sample[:, coord_idx])
+            target_dists = np.abs(target_sample[:, coord_idx, None] - target_sample[:, coord_idx])
+
+            # Flatten upper triangle (excluding diagonal)
+            triu = np.triu_indices_from(xyz_dists, k=1)
+            xyz_flat = xyz_dists[triu].flatten()
+            target_flat = target_dists[triu].flatten()
 
             # Plot distributions
-            sns.kdeplot(target_np, ax=ax, color='blue', label='Target', fill=True, alpha=0.3)
-            sns.kdeplot(subset, ax=ax, color='orange', label='Samples', fill=True, alpha=0.3)
+            sns.kdeplot(target_flat, ax=ax, color='blue', label='Target', fill=True, alpha=0.3)
+            sns.kdeplot(xyz_flat, ax=ax, color='orange', label='Samples', fill=True, alpha=0.3)
 
-            # Add metrics
-            emd = wasserstein_distance(target_np, subset)
-            jsd = js_divergence(target_np, subset)
-            ax.set_title(f"{coord_name} | EMD: {emd:.3f}\nJSD: {jsd:.3f}")
-            ax.set_xlabel('Coordinate Value')
+            # Calculate metrics
+            emd = wasserstein_distance(target_flat, xyz_flat)
+            jsd = js_divergence(target_flat, xyz_flat)
 
-            # Add legend so user can see which distribution is which
+            ax.set_title(f"{['X', 'Y', 'Z'][coord_idx]} | EMD: {emd:.2f}\nJSD: {jsd:.2f}")
+            ax.set_xlabel('Coordinate Distance')
             ax.legend()
 
+            # Store metrics
+            all_emd[coord_idx].append(emd)
+            all_jsd[coord_idx].append(jsd)
+
+    # Calculate median scores
+    median_metrics = {
+        'median_emd_x': np.median(all_emd[0]),
+        'median_emd_y': np.median(all_emd[1]),
+        'median_emd_z': np.median(all_emd[2]),
+        'median_jsd_x': np.median(all_jsd[0]),
+        'median_jsd_y': np.median(all_jsd[1]),
+        'median_jsd_z': np.median(all_jsd[2]),
+    }
+
     return {
-        "xyz_distributions": wandb.Image(fig),
-        "xyz_median_emd": np.median([wasserstein_distance(target_np, d)
-                                     for d in [x_data, y_data, z_data]]),
-        "xyz_median_jsd": np.median([js_divergence(target_np, d)
-                                     for d in [x_data, y_data, z_data]])
+        "relative_distance_distributions": wandb.Image(fig),
+        **median_metrics
     }
 
 
