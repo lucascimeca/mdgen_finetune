@@ -36,7 +36,7 @@ parser.add_argument('--peptide', type=str, default='FLRH', help='Peptide sequenc
 parser.add_argument('--diffusion_steps', type=int, default=100)
 parser.add_argument('--wandb_track', default=False, type=strtobool, help='Whether to track with wandb.')
 parser.add_argument('--entity', default=None, type=str, help='Wandb entity')
-#parser.add_argument('--prior_sample', default=False, type=strtobool, help="Whether to use off policy samples from prior")
+parser.add_argument('--prior_sample', default=False, type=strtobool, help="Whether to use off policy samples from prior")
 parser.add_argument('--replay_buffer', default='none', type=str, help='Type of replay buffer to use', choices=['none','uniform','reward'])
 parser.add_argument('--prior_sample_prob', default=0.0, type=float, help='Probability of using prior samples')
 parser.add_argument('--replay_buffer_prob', default=0.0, type=float, help='Probability of using replay buffer samples')
@@ -46,9 +46,14 @@ parser.add_argument('--anneal', default=False, type=strtobool, help='Whether to 
 parser.add_argument('--anneal_steps', default=15000, type=int, help="Number of steps for temperature annealing")
 parser.add_argument('--orig_scale', default=1.0, type=float, help='STD of the gaussian at x_0.')
 
+# for the prior
 parser.add_argument('--save_path', default='~/scratch/CNF_RTB_ckpts/', type=str, help='Path to save model checkpoints')
-parser.add_argument('--load_ckpt', default=False, type=strtobool, help='Whether to load checkpoint')
+parser.add_argument('--load_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')
 parser.add_argument('--load_path', default='../pretrained/', type=str, help='Path to load model checkpoint')
+
+# for the outsorced sampler
+parser.add_argument('--load_outsourced_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')
+parser.add_argument('--load_outsourced_path', default='../pretrained/', type=str, help='Path to load model checkpoint')
 
 parser.add_argument('--langevin', default=False, type=strtobool, help="Whether to use Langevin dynamics for sampling")
 
@@ -117,8 +122,8 @@ rtb_model = protein_rtb.ProteinRTBModel(
     langevin=args.langevin,
     inference_type=args.inference,
     tb=args.tb,
-    load_ckpt=args.load_ckpt,
-    load_ckpt_path=args.load_path,
+    load_ckpt=args.load_outsourced_ckpt,
+    load_ckpt_path=args.load_outsourced_path,
     entity=args.entity,
     diffusion_steps=args.diffusion_steps,
     beta_start=args.beta_start,
@@ -151,3 +156,9 @@ rtb_model.finetune(shape=(args.batch_size, *in_shape),
                    replay_buffer_prob=args.replay_buffer_prob,
                    anneal=args.anneal,
                    anneal_steps=args.anneal_steps)
+
+# rtb_model.denoising_score_matching_unif(
+#     n_iters=10000,
+#     learning_rate=5e-5,
+#     clip=0.1
+# )

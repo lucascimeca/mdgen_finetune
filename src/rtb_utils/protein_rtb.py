@@ -24,6 +24,7 @@ def create_batches(ids, batch_size):
     for i in range(0, len(ids), batch_size):
         yield ids[i:i + batch_size]
 
+
 class ProteinRTBModel(nn.Module):
     def __init__(self,
                  device,
@@ -107,12 +108,6 @@ class ProteinRTBModel(nn.Module):
             dropout=0.0,
         ).to(self.device)
 
-        # for DSM pretraining 
-
-        # self.load_pretrained_ckpt_path = os.path.expanduser(load_pretrained_checkpoint_path)
-        # checkpoint = torch.load(self.load_pretrained_ckpt_path)
-        # self.model.load_state_dict(checkpoint['model_state_dict'])
-        # print("DSM model loaded from: ", self.load_pretrained_ckpt_path)
 
         # pretrained frozen model 
 
@@ -203,9 +198,8 @@ class ProteinRTBModel(nn.Module):
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         print(f"Checkpoint loaded from {self.load_ckpt_path}")
 
-        # get iteration number (number before .pth)
-        it = int(self.load_ckpt_path.split('/')[-1].split('_')[-1].split('.')[0])
-        print("Epoch number: ", it)
+        it = 0
+
         return model, optimizer, it
 
     def classifier_reward(self, x):
@@ -464,27 +458,20 @@ class ProteinRTBModel(nn.Module):
     def denoising_score_matching_unif(self, n_iters=1000, learning_rate=5e-5, clip=0.1):
         param_list = [{'params': self.model.parameters()}]
         optimizer = torch.optim.Adam(param_list, lr=learning_rate)
-        run_name = 'DSM_unif_' + "unet_type" + self.id  # + '_sde_' + self.sde_type +'_steps_' + str(self.steps) + '_lr_' + str(learning_rate)
+        run_name = '../pretrained/DSM_unif_' + "unet_type" + self.id  # + '_sde_' + self.sde_type +'_steps_' + str(self.steps) + '_lr_' + str(learning_rate)
 
         if self.wandb_track:
             wandb.init(
-                project='mdgen_cfm_posterior',
+                project='mdgen_cfm_prior',
                 entity=self.entity,
                 save_code=True,
                 name=run_name,
                 config=self.config
             )
-            hyperparams = {
-                "learning_rate": learning_rate,
-                "n_iters": n_iters,
-                "dsm_unif": True
-            }
-            wandb.config.update(hyperparams)
         B = 64  # 32
 
         if self.load_ckpt:
             self.model, optimizer, load_it = self.load_checkpoint(self.model, optimizer)
-            # load_it = 0 # to save on fresh runs
         else:
             load_it = 0
 
@@ -492,12 +479,10 @@ class ProteinRTBModel(nn.Module):
             optimizer.zero_grad()
 
             # sample uniform so3
-            x0 = self.prior_model.sample_prior(batch_size=B, sample_length=self.in_shape[0])
-            x0 = x0["rigids_t"].to(self.device)
-
-            # print('x0 shape: ', x0.shape)
-            # x0 = x0.permute(0, 2, 1).reshape(-1, *self.gfn_shape)
-            # x0 =x0.reshape((B, self.gfn_shape))
+            # x0 = self.prior_model.sample_prior(batch_size=B, sample_length=self.in_shape[0])
+            # x0 = x0["rigids_t"].to(self.device)
+            T, L, _ = self.in_shape
+            x0 = self.prior_model.model.sample_prior_latent(B, T, L, self.device)
 
             # sample random timestep 
             t = torch.rand(B).to(self.device) * self.sde.T
