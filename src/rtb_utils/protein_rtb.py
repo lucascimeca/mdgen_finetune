@@ -4,6 +4,7 @@ import shutil
 
 import matplotlib.pyplot as plt
 
+import mdgen.rigid_utils
 from mdgen.model.latent_model import LatentMDGenModel
 from rtb_utils.plot_utils import compare_distributions, plot_relative_distance_distributions
 from rtb_utils.pytorch_utils import safe_reinit, get_batch, create_batches
@@ -162,17 +163,16 @@ class ProteinRTBModel(nn.Module):
     def load_checkpoint(self, model, optimizer):
         if self.load_ckpt_path is None:
             print("Checkpoint path not provided. Checkpoint not loaded.")
-            return model, optimizer
+            return model.to(self.device), optimizer
 
         checkpoint = torch.load(self.load_ckpt_path)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         print(f"Checkpoint loaded from {self.load_ckpt_path}")
-        model = model.to(self.device)
 
         it = 0
 
-        return model, optimizer, it
+        return model.to(self.device), optimizer, it
 
     def classifier_reward(self, x):
         if self.num_classes == 1:
@@ -507,7 +507,7 @@ class ProteinRTBModel(nn.Module):
             self.model, optimizer, load_it = self.load_checkpoint(self.model, optimizer)
             if not self.tb:
                 self.ref_model = copy.deepcopy(self.model).to(self.device)
-                # self._freeze_model(self.ref_model)
+                self.ref_model = self.ref_model.eval()
                 if self.config.lora:
                     unet_lora_config = LoraConfig(
                         r=self.config.rank,

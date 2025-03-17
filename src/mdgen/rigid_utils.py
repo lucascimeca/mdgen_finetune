@@ -1389,3 +1389,12 @@ class Rigid:
                 A version of the transformation on GPU
         """
         return Rigid(self._rots.cuda(), self._trans.cuda())
+
+    def to(self, device):
+        if self.device != device:
+            if device == 'cpu':
+                return Rigid(self._rots.to('cpu'), self._trans.to('cpu'))
+            else:
+                return self.cuda()
+        else:
+            return self
