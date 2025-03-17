@@ -139,8 +139,7 @@ class ProteinRTBModel(nn.Module):
             prep = self.prior_model.model.prep_batch(batch)
             self.cond_args = prep['model_kwargs']
             for k, v in self.cond_args.items():
-                if isinstance(v, torch.Tensor):
-                    self.cond_args[k] = v.to(self.device)
+                self.cond_args[k] = v.to(self.device)
         return self.cond_args
 
     def save_checkpoint(self, model, optimizer, epoch, run_name):
