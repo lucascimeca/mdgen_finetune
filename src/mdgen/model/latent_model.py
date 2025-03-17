@@ -379,7 +379,7 @@ class IPALayer(nn.Module):
         print('#########')
         print('#########')
         print(x.device)
-        print(self.device)
+        print(self.fc1.weight.device)
         print(mask.device)
         print(frames.device)
         print('#########')
