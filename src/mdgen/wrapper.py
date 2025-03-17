@@ -441,7 +441,8 @@ class NewMDGenWrapper(Wrapper):
         #     torsions = batch['torsions'].view(B, T, L, 14)
         # else:
 
-        B = zs0.shape[0]
+        if zs0 is not None:
+            B = zs0.shape[0]
         if self.args.dynamic_mpnn or self.args.mpnn:
             x1 = prep['latents']
             x_d = torch.zeros(x1.shape[0], x1.shape[1], x1.shape[2], 20, device=self.device)

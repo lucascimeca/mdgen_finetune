@@ -1,7 +1,10 @@
+import copy
 import os
 import matplotlib.pyplot as plt
 
+from mdgen.model.latent_model import LatentMDGenModel
 from rtb_utils.plot_utils import compare_distributions, plot_relative_distance_distributions
+from rtb_utils.pytorch_utils import safe_reinit, get_batch, create_batches
 
 os.environ['PYMOL_QUIET'] = '1'
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
@@ -12,6 +15,7 @@ import torch.nn as nn
 from torchcfm.models.unet.unet import UNetModelWrapper
 import wandb
 from tqdm import tqdm
+from peft import LoraConfig, get_peft_model, PeftConfig, PeftModel, load_peft_weights, set_peft_model_state_dict
 
 import random
 
@@ -20,12 +24,11 @@ import rtb_utils as utils
 
 from datetime import datetime
 
-def create_batches(ids, batch_size):
-    for i in range(0, len(ids), batch_size):
-        yield ids[i:i + batch_size]
-
 
 class ProteinRTBModel(nn.Module):
+
+    cond_args = None
+
     def __init__(self,
                  device,
                  reward_model,
@@ -95,35 +98,12 @@ class ProteinRTBModel(nn.Module):
 
         self.mlp_dim = self.gfn_shape[0] * self.gfn_shape[1] * self.gfn_shape[2]
 
-        self.mlp_type = False  # True
+        self.model = copy.deepcopy(prior_model.model.model).to(self.device)
+        safe_reinit(self.model)
 
-        self.model = UNetModelWrapper(
-            dim=self.gfn_shape,
-            num_res_blocks=2,
-            num_channels=128,
-            channel_mult=(2, 2),
-            num_heads=4,
-            num_head_channels=64,
-            attention_resolutions="16",
-            dropout=0.0,
-        ).to(self.device)
-
-
-        # pretrained frozen model 
-
-        self.ref_model = UNetModelWrapper(
-            dim=self.gfn_shape,
-            num_res_blocks=2,
-            num_channels=128,
-            channel_mult=(2, 2),
-            num_heads=4,
-            num_head_channels=64,
-            attention_resolutions="16",
-            dropout=0.0,
-        ).to(self.device)
-
-        for param in self.ref_model.parameters():
-            param.requires_grad = False
+        if not self.tb:
+            self.ref_model = copy.deepcopy(prior_model.model.model).to(self.device)
+            self._freeze_model(self.ref_model)
 
         # Prior flow model pipeline
         self.prior_model = prior_model
@@ -140,36 +120,22 @@ class ProteinRTBModel(nn.Module):
         else:
             self.load_ckpt_path = load_ckpt_path
 
-    def model_and_shape(self, t, x):
-        # will be [B, N, 7]
-        # print("input x.shape: ", x.shape)
+    def _freeze_model(self, model):
+        for param in self.ref_model.parameters():
+            param.requires_grad = False
 
-        # reshape x to gfn_shape
-        x = x.squeeze(1).permute(0, 2, 1).reshape(x.shape[0], *self.gfn_shape)
-
-        model_out = self.model(t, x)
-        # reshape to in_shape [1, 64, 7]
-        model_out_shaped = model_out.permute(0, 3, 1, 2).reshape(x.shape[0], *self.in_shape)
-        # print("model out shape")
-
-        return model_out_shaped
-
-    # according to reference model 
-    def ref_model_and_shape(self, t, x):
-        # will be [B, N, 7]
-        # print("input x.shape: ", x.shape)
-
-        # reshape x to gfn_shape
-        x = x.squeeze(1).permute(0, 2, 1).reshape(x.shape[0], *self.gfn_shape)
-
-        with torch.no_grad():
-            model_out = self.ref_model(t, x)
-
-        # reshape to in_shape [1, 64, 7]
-        model_out_shaped = model_out.permute(0, 3, 1, 2).reshape(x.shape[0], *self.in_shape)
-        # print("model out shape")
-
-        return model_out_shaped
+    def get_cond_args(self):
+        if self.cond_args is None:
+            item = get_batch(self.prior_model.peptide,
+                             self.prior_model.peptide,
+                             tps=self.prior_model.tps,
+                             no_frames=self.prior_model.model.args.no_frames,
+                             data_dir=self.prior_model.data_dir,
+                             suffix=self.prior_model.suffix)
+            batch = next(iter(torch.utils.data.DataLoader([item])))
+            prep = self.prior_model.model.prep_batch(batch)
+            self.cond_args = prep['model_kwargs']
+        return self.cond_args
 
     def save_checkpoint(self, model, optimizer, epoch, run_name):
         if self.model_save_path is None:
@@ -438,11 +404,9 @@ class ProteinRTBModel(nn.Module):
 
         g = self.sde.diffusion(t, xt)
 
+        model_out = self.model(xt, t, **self.get_cond_args())
         # xt_r = xt.permute(0, )
-        posterior_drift = -self.sde.drift(t, xt) - (g ** 2) * (self.model_and_shape(t, xt)) / self.sde.sigma(t).view(-1,
-                                                                                                                     *[
-                                                                                                                          1] * len(
-                                                                                                                         D))
+        posterior_drift = -self.sde.drift(t, xt) - (g ** 2) * model_out / self.sde.sigma(t).view(-1,*[1] * len(D))
 
         f_posterior = posterior_drift
         # compute parameters for denoising step (wrt posterior)
@@ -502,10 +466,10 @@ class ProteinRTBModel(nn.Module):
 
             print("Iteration {}, Loss: {:.4f}".format(it, loss.item()))
 
-            if not it % 100 == 0:
+            if self.wandb_track and not it % 100 == 0:
                 wandb.log({"loss": loss.item(), "epoch": it})
 
-            if it % 100 == 0:
+            if self.wandb_track and it % 100 == 0:
                 wandb.log({"loss": loss.item(), "epoch": it})
                 self.save_checkpoint(self.model, optimizer, it, run_name)
 
@@ -535,6 +499,33 @@ class ProteinRTBModel(nn.Module):
 
         if self.load_ckpt:
             self.model, optimizer, load_it = self.load_checkpoint(self.model, optimizer)
+            if not self.tb:
+                self.ref_model = copy.deepcopy(self.model)
+                # self._freeze_model(self.ref_model)
+                if self.config.lora:
+                    unet_lora_config = LoraConfig(
+                        r=self.config.rank,
+                        lora_alpha=self.config.rank,
+                        init_lora_weights="gaussian",
+                        target_modules=[
+                            "conv",
+                            "in_layers.2",
+                            "in_layers.3",
+                            "emb_layers.1",
+                            "out_layers.3",
+                            "out.2",
+                            "op",
+                        ],
+                    )
+                    self.model = get_peft_model(self.model, unet_lora_config)
+                    prior_params = sum(p.numel() for p in self.ref_model.parameters())
+                    posterior_params = sum(p.numel() for p in self.model.parameters())
+                    trainable_posterior_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+                    print(f"\nTotal params: "
+                          f"\nPRIOR model: {prior_params / 1e6:.2f}M "
+                          f"\nPOSTERIOR model: {posterior_params / 1e6:.2f}M"
+                          f"\nTrainable posterior parameters: {trainable_posterior_params / 1e6:.2f}M/{posterior_params / 1e6:.2f}M  ({trainable_posterior_params * 100 / posterior_params:.2f}%)\n")
+
         else:
             load_it = 0
 
@@ -666,7 +657,7 @@ class ProteinRTBModel(nn.Module):
             x_1=None,
             save_traj=False,
             prior_sample=False,
-            time_discretisation='uniform'  # uniform/random
+            time_discretisation='uniform'  # uniform/random,
     ):
         """
         An Euler-Maruyama integration of the model SDE with GFN for RTB
@@ -722,8 +713,9 @@ class ProteinRTBModel(nn.Module):
 
             lp_correction = self.get_langevin_correction(x)
 
+            model_out = self.model(x, t, **self.get_cond_args(self))
             posterior_drift = -self.sde.drift(t, x) - (g ** 2) * (
-                        self.model_and_shape(t, x) + lp_correction
+                        model_out + lp_correction
             ) / self.sde.sigma(t).view(-1, *[1] * len(D))
 
             # compute parameters for denoising step (wrt posterior)
@@ -848,8 +840,8 @@ class ProteinRTBModel(nn.Module):
             g = self.sde.diffusion(t, x)
 
             # lp_correction = self.get_langevin_correction(x)
-
-            posterior_drift = -self.sde.drift(t, x) - (g ** 2) * (self.model_and_shape(t, x)) / self.sde.sigma(t).view(-1, *[1] * len(D))
+            model_out = self.model(x, t, **self.get_cond_args())
+            posterior_drift = -self.sde.drift(t, x) - (g ** 2) * model_out / self.sde.sigma(t).view(-1, *[1] * len(D))
 
             # compute parameters for denoising step (wrt posterior)
             x_mean_posterior = x + posterior_drift * dt  # * (-1.0 if backward else 1.0)
@@ -868,12 +860,12 @@ class ProteinRTBModel(nn.Module):
             # x_mean_pb = x + pb_drift * (-dt)
 
             if backward:
-                ref_drift = -self.sde.drift(t, x) - (g ** 2) * (self.ref_model_and_shape(t, x)) / self.sde.sigma(
+                ref_drift = -self.sde.drift(t, x) - (g ** 2) * self.ref_model(x, t, **self.get_cond_args()) / self.sde.sigma(
                     t).view(-1, *[1] * len(D))
                 pb_drift = ref_drift  # -self.sde.drift(t, x)
                 x_mean_pb = x + pb_drift * (dt)
             else:
-                ref_drift = -self.sde.drift(t, x_prev) - (g ** 2) * (self.ref_model_and_shape(t, x_prev)) / self.sde.sigma(t).view(-1, *[1] * len(D))
+                ref_drift = -self.sde.drift(t, x_prev) - (g ** 2) * self.ref_model(x, t, **self.get_cond_args()) / self.sde.sigma(t).view(-1, *[1] * len(D))
                 pb_drift = ref_drift  # -self.sde.drift(t, x_prev)
                 x_mean_pb = x_prev + pb_drift * (dt)
             # x_mean_pb = x_prev + pb_drift * (dt)
@@ -975,7 +967,7 @@ class ProteinRTBModel(nn.Module):
             std = self.sde.diffusion(t, x, np.abs(dt))
 
             lp_correction = self.get_langevin_correction(x)
-            posterior_drift = self.sde.drift(t, x, np.abs(dt)) + self.model_and_shape(t, x) + lp_correction  # / self.sde.sigma(t).view(-1, *[1]*len(D))
+            posterior_drift = self.sde.drift(t, x, np.abs(dt)) + self.model(x, t, **self.get_cond_args()) + lp_correction  # / self.sde.sigma(t).view(-1, *[1]*len(D))
             f_posterior = posterior_drift
             # compute parameters for denoising step (wrt posterior)
             x_mean_posterior = x + f_posterior
@@ -1111,7 +1103,7 @@ class ProteinRTBModel(nn.Module):
 
             lp_correction = self.get_langevin_correction(xs)
             f_posterior = -self.sde.drift(t_, xs) - g ** 2 * (
-                        self.model_and_shape(t_[:, 0, 0, 0], xs) + lp_correction) / \
+                        self.model(xs, t_[:, 0, 0, 0], **self.get_cond_args()) + lp_correction) / \
                           self.sde.sigma(t_).view(-1,
                                                   *[1] * len(D))
 
@@ -1222,8 +1214,7 @@ class ProteinRTBModel(nn.Module):
             std = self.sde.diffusion(t_, xs, -dts).to(self.device)
 
             lp_correction = self.get_langevin_correction(xs)
-            f_posterior = self.sde.drift(t_, xs, -dts) + self.model_and_shape(t_[:, 0, 0, 0],
-                                                                              xs) + lp_correction  # / self.sde.sigma(t_).view(-1, *[1]*len(D))
+            f_posterior = self.sde.drift(t_, xs, -dts) + self.model(xs, t_[:, 0, 0, 0], **self.get_cond_args()) + lp_correction  # / self.sde.sigma(t_).view(-1, *[1]*len(D))
 
             # compute parameters for denoising step (wrt posterior)
             x_mean_posterior = xs + f_posterior

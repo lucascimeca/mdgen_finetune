@@ -99,7 +99,7 @@ def rollout(model, batch):
     
 def do(model, name, seqres):
 
-    item = get_batch(name, seqres, num_frames = model.args.num_frames)
+    item = get_batch(name, seqres, num_frames=model.args.num_frames)
     batch = next(iter(torch.utils.data.DataLoader([item])))
 
     batch = tensor_tree_map(lambda x: x.to(device), batch)  

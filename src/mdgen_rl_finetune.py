@@ -51,6 +51,10 @@ parser.add_argument('--save_path', default='~/scratch/CNF_RTB_ckpts/', type=str,
 parser.add_argument('--load_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')
 parser.add_argument('--load_path', default='../pretrained/', type=str, help='Path to load model checkpoint')
 
+# lora
+parser.add_argument('--lora', default=True, type=strtobool, help='low rank approximation training.')
+parser.add_argument('--rank', default=32, type=int, help='lora rank.')
+
 # for the outsorced sampler
 parser.add_argument('--load_outsourced_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')
 parser.add_argument('--load_outsourced_path', default='../pretrained/', type=str, help='Path to load model checkpoint')
@@ -148,17 +152,17 @@ if args.langevin:
         learning_rate=args.lr
     )
 
-rtb_model.finetune(shape=(args.batch_size, *in_shape),
-                   n_iters=args.n_iters,
-                   learning_rate=args.lr,
-                   clip=args.clip,
-                   prior_sample_prob=args.prior_sample_prob,
-                   replay_buffer_prob=args.replay_buffer_prob,
-                   anneal=args.anneal,
-                   anneal_steps=args.anneal_steps)
+# rtb_model.finetune(shape=(args.batch_size, *in_shape),
+#                    n_iters=args.n_iters,
+#                    learning_rate=args.lr,
+#                    clip=args.clip,
+#                    prior_sample_prob=args.prior_sample_prob,
+#                    replay_buffer_prob=args.replay_buffer_prob,
+#                    anneal=args.anneal,
+#                    anneal_steps=args.anneal_steps)
 
-# rtb_model.denoising_score_matching_unif(
-#     n_iters=10000,
-#     learning_rate=5e-5,
-#     clip=0.1
-# )
+rtb_model.denoising_score_matching_unif(
+    n_iters=10000,
+    learning_rate=5e-5,
+    clip=0.1
+)
