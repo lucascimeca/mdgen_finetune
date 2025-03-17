@@ -165,6 +165,7 @@ class ProteinRTBModel(nn.Module):
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         print(f"Checkpoint loaded from {self.load_ckpt_path}")
+        model = model.to(self.device)
 
         it = 0
 
@@ -502,7 +503,7 @@ class ProteinRTBModel(nn.Module):
         if self.load_ckpt:
             self.model, optimizer, load_it = self.load_checkpoint(self.model, optimizer)
             if not self.tb:
-                self.ref_model = copy.deepcopy(self.model)
+                self.ref_model = copy.deepcopy(self.model).to(self.device)
                 # self._freeze_model(self.ref_model)
                 if self.config.lora:
                     unet_lora_config = LoraConfig(
@@ -519,7 +520,7 @@ class ProteinRTBModel(nn.Module):
                             "op",
                         ],
                     )
-                    self.model = get_peft_model(self.model, unet_lora_config)
+                    self.model = get_peft_model(self.model, unet_lora_config).to(self.device)
                     prior_params = sum(p.numel() for p in self.ref_model.parameters())
                     posterior_params = sum(p.numel() for p in self.model.parameters())
                     trainable_posterior_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
@@ -678,7 +679,7 @@ class ProteinRTBModel(nn.Module):
         sampling_from = "prior" if prior_sample  is None else "posterior"
 
         if backward:
-            x = x_1
+            x = x_1.to(self.device)
             t = torch.zeros(B).to(self.device) + self.sde.epsilon
         else:
             x = self.sde.prior(D).sample([B]).to(self.device)
