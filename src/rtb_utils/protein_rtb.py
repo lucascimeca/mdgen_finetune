@@ -713,7 +713,7 @@ class ProteinRTBModel(nn.Module):
 
             lp_correction = self.get_langevin_correction(x)
 
-            model_out = self.model(x, t, **self.get_cond_args(self))
+            model_out = self.model(x, t, **self.get_cond_args())
             posterior_drift = -self.sde.drift(t, x) - (g ** 2) * (
                         model_out + lp_correction
             ) / self.sde.sigma(t).view(-1, *[1] * len(D))

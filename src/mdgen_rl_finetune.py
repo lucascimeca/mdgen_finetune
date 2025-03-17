@@ -152,17 +152,17 @@ if args.langevin:
         learning_rate=args.lr
     )
 
-# rtb_model.finetune(shape=(args.batch_size, *in_shape),
-#                    n_iters=args.n_iters,
-#                    learning_rate=args.lr,
-#                    clip=args.clip,
-#                    prior_sample_prob=args.prior_sample_prob,
-#                    replay_buffer_prob=args.replay_buffer_prob,
-#                    anneal=args.anneal,
-#                    anneal_steps=args.anneal_steps)
+rtb_model.finetune(shape=(args.batch_size, *in_shape),
+                   n_iters=args.n_iters,
+                   learning_rate=args.lr,
+                   clip=args.clip,
+                   prior_sample_prob=args.prior_sample_prob,
+                   replay_buffer_prob=args.replay_buffer_prob,
+                   anneal=args.anneal,
+                   anneal_steps=args.anneal_steps)
 
-rtb_model.denoising_score_matching_unif(
-    n_iters=10000,
-    learning_rate=5e-5,
-    clip=0.1
-)
+# rtb_model.denoising_score_matching_unif(
+#     n_iters=10000,
+#     learning_rate=5e-5,
+#     clip=0.1
+# )
