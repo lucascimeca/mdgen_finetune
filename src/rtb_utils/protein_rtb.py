@@ -631,6 +631,7 @@ class ProteinRTBModel(nn.Module):
                     plt.close('all')
                     # save model and optimizer state
                     self.save_checkpoint(self.model, optimizer, it, run_name)
+        os.rmdir(self.tmp_dir)
 
     def get_langevin_correction(self, x):
         # add gradient wrt x of trainable reward to model
