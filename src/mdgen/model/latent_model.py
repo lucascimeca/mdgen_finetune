@@ -374,6 +374,10 @@ class IPALayer(nn.Module):
         shift_msa_l, scale_msa_l, gate_msa_l, \
             shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(t).chunk(6, dim=-1)
         x = x + self.ipa(self.ipa_norm(x), frames, frame_mask=mask)
+        print(x.device)
+        print(self.device)
+        print(mask.device)
+        print(frames.device)
 
         residual = x
         x = modulate(self.mha_layer_norm(x), shift_msa_l, scale_msa_l)
