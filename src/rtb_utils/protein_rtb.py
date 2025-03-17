@@ -137,6 +137,9 @@ class ProteinRTBModel(nn.Module):
             batch = next(iter(torch.utils.data.DataLoader([item])))
             prep = self.prior_model.model.prep_batch(batch)
             self.cond_args = prep['model_kwargs']
+            for k, v in self.cond_args.items():
+                if isinstance(v, torch.Tensor):
+                    self.cond_args[k] = v.to(self.device)
         return self.cond_args
 
     def save_checkpoint(self, model, optimizer, epoch, run_name):
@@ -718,7 +721,7 @@ class ProteinRTBModel(nn.Module):
 
             lp_correction = self.get_langevin_correction(x)
 
-            model_out = self.model.to(self.device)(x, t, **self.get_cond_args())
+            model_out = self.model(x, t, **self.get_cond_args())
             posterior_drift = -self.sde.drift(t, x) - (g ** 2) * (
                         model_out + lp_correction
             ) / self.sde.sigma(t).view(-1, *[1] * len(D))
