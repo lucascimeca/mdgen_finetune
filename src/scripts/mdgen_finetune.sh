@@ -19,7 +19,7 @@ module --quiet purge
 # This example uses Conda to manage package dependencies.
 # See https://docs.mila.quebec/Userguide.html#conda for more information.
 module load anaconda/3
-module load cuda/11.7
+module load cuda/12.4
 
 # Creating the environment for the first time:
 # conda create -y -n pytorch python=3.9 pytorch torchvision torchaudio \
@@ -52,4 +52,4 @@ python ../outsourced_train_posterior.py --traj_length 100 --sampling_length 20 -
                                         --load_path ../../pretrained/ --method rtb --learning_rate 6e-4 \
                                         --energy_temperature $1 --vargrad_sample_n0 4 --test_sample_size 300 \
                                         --load_outsourced_path ../../pretrained/mdgen_source_sampler.pth \
-                                        --push_to_wandb True --replace True ---load_outsourced_ckpt True
+                                        --push_to_wandb True --replace True --load_outsourced_ckpt True
