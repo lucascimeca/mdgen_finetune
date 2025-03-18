@@ -49,7 +49,7 @@ prior_model = MDGenSimulator(
 ddpm_pipeline = get_DDPM_diffuser_pipeline(args, prior_model)
 params = [param for param in ddpm_pipeline.posterior_node.get_unet_parameters() if param.requires_grad]
 opt = torch.optim.Adam([{'params': params,
-                         'lr': args.lr},
+                         'lr': args.learning_rate},
                         {'params': [ddpm_pipeline.logZ],
                          'lr': args.lr_logZ,
                          'weight_decay':args.z_weight_decay}])

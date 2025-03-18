@@ -138,8 +138,16 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     # ------ FOLDER CREATION AND SETTINGS -----------------
     # create exp_name if it wasn't given, then choose and create a folder to save exps based on parameters
 
-    exp_critical_args = ['traj_length', 'sampling_length', 'batch_size', 'learning_rate', 'energy_temperature', 'vargrad_sample_n0',
-                         'test_sample_size', 'load_outsourced_ckpt']
+    exp_critical_args = [
+        # 'traj_length',
+        # 'sampling_length',
+        'batch_size',
+        'learning_rate',
+        'energy_temperature',
+        # 'vargrad_sample_n0',
+        # 'test_sample_size',
+        'load_outsourced_ckpt'
+    ]
     args.exp_name = f"{'_'.join([f'{k}_{args.__dict__[k]}' for k in exp_critical_args])}"
     if len(args.exp_name) == 0:
         args.exp_name = f"mdgen_finetune_{args.model}"
