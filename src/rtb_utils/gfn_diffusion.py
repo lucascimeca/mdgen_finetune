@@ -354,7 +354,7 @@ class RTBTrainer(Trainer):
 
             # get reward
             if logr_x_prime is None:
-                self.sampler.prior_model.sample(zs0=results_dict['x'].to(self.device).detach())  # sample in place, forms pdbs on disk
+                self.sampler.prior_model.sample(zs0=results_dict['x'].to(self.config.device).detach())  # sample in place, forms pdbs on disk
                 rwd_logs = self.reward_function(
                     self.sampler.prior_model.peptide,
                     data_path=self.sampler.config.data_path,
