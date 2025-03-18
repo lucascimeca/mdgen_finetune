@@ -212,7 +212,7 @@ class Trainer:
 
                 self.logger.log(results_dict)  # log results locally
 
-                if it % 10 == 0:
+                if it % 50 == 0:
 
                     plot_logs = self.generate_plots(results_dict, **sampler_kwargs)
 
@@ -255,7 +255,7 @@ class Trainer:
         raise NotImplementedError()
 
 class FinetunePlotter:
-    def generate_plots(self, batch_logs, *args, **kwargs):
+    def generate_plots(self, batch_logs, long=False, *args, **kwargs):
         """generate plots for current prior/posterior modeled distribution"""
         logs = {}
         context = NoContext() if self.sampler.config.method in ['dps', 'fps'] else torch.no_grad()
