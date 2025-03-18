@@ -270,14 +270,6 @@ class LatentMDGenModel(nn.Module):
                           aatype=None
                           ):
         if not self.args.design or self.args.dynamic_mpnn or self.args.mpnn:
-            print(x.device)
-            print(t.device)
-            print(mask.device)
-            print(start_frames.device)
-            print(end_frames.device)
-            print(x_cond.device)
-            print(x_cond_mask.device)
-            print(aatype.device)
             return self.forward(x, t, mask, start_frames, end_frames, x_cond, x_cond_mask, aatype)
         else:
             x_discrete = x[:, :, :, -20:]
