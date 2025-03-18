@@ -163,7 +163,7 @@ class Trainer:
             exp_name = "_".join(exp_name.split("_")[:-1]).split('-')[0] if '_' in exp_name else exp_name
 
             wandb.init(
-                project=exp_name,
+                project="".join(exp_name.split('_')[:2]),
                 dir=self.config.save_folder,
                 resume=True,
                 mode='online' if self.config.push_to_wandb else "offline",
