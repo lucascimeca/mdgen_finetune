@@ -4,7 +4,6 @@ from rtb_utils.simple_io import folder_exists, folder_create
 
 warnings.filterwarnings("ignore")
 
-
 import argparse
 import platform
 import os
@@ -53,7 +52,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     parser.add_argument('-bs', '--batch_size', type=int, default=32, help="Training Batch Size.")
     parser.add_argument('-tbs', '--test_sample_size', default=300, type=int, help='Test batchsize.')
 
-    parser.add_argument('--lr', '--learning_rate', default=1e-3, type=float, help='Initial learning rate.')
+    parser.add_argument('--learning_rate', default=1e-3, type=float, help='Initial learning rate.')
     parser.add_argument('--lr_logZ', default=1e-1, type=float, help='Learning rate for logZ.')
     parser.add_argument('--z_weight_decay', default=0, type=float, help='Weight decay for logZ.')
     parser.add_argument('--vargrad', default=False, type=strtobool, help='Whether to use vargrad.')
@@ -139,6 +138,10 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
 
     # ------ FOLDER CREATION AND SETTINGS -----------------
     # create exp_name if it wasn't given, then choose and create a folder to save exps based on parameters
+
+    exp_critical_args = ['traj_length', 'sampling_length', 'batch_size', 'learning_rate', 'energy_temperature', 'vargrad_sample_n0',
+                         'test_sample_size', 'load_outsourced_ckpt']
+    args.exp_name = f"{'_'.join([f'{k}_{args.__dict__[k]}' for k in exp_critical_args])}"
     if len(args.exp_name) == 0:
         args.exp_name = f"mdgen_finetune_{args.model}"
     args.exp_name = f"{exp_prepend}_{args.exp_name}"
