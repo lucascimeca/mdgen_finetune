@@ -177,9 +177,6 @@ class HGFNode(nn.Module):
             t_next=None,
             ddim_eta=None,
             noise=None,
-            condition_noise=None,
-            prior_mean=None,
-            reward_function=None,
             target=None,
             backward=False,
             x_0=None,
@@ -263,8 +260,6 @@ class PosteriorPriorDGFN(nn.Module):
         self.use_cuda = self.config.use_cuda
         self.device = 'cuda' if self.use_cuda else 'cpu'
         self.mixed_precision = mixed_precision
-
-        self.dataloader = cycle(dataloader) if dataloader is not None else None
 
         if self.mixed_precision:
             self.context = autocast()
@@ -419,8 +414,10 @@ class PosteriorPriorDGFN(nn.Module):
         if self.mixed_precision and 'cuda' in self.device:
             x = x.half()
 
+        x_start = x.clone()
         return_dict['logpf_posterior'] = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
         return_dict['logpf_prior'] = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
+        return_dict['logpb'] = 0 * normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
 
         scheduler = copy.deepcopy(self.posterior_node.policy.scheduler)
         scheduler.set_timesteps(sampling_length)
@@ -433,6 +430,7 @@ class PosteriorPriorDGFN(nn.Module):
         if save_traj:
             traj = [x.clone()]
 
+        t_prev = torch.LongTensor([self.traj_length])[0] - 1
         for i, t in tqdm(enumerate(sampling_times), total=len(sampling_times)):
 
             t_specific_args = {
@@ -471,10 +469,14 @@ class PosteriorPriorDGFN(nn.Module):
                 # get posterior pf
                 return_dict['logpf_posterior'] += self.posterior_node.get_logpf(x=new_x)
 
+            pb_mean, pb_std = scheduler.step_noise(new_x, t_source=t, t_end=t_prev)
+            return_dict['logpb'] += self.prior_node.get_logpf(x=x.detach(), mean=pb_mean.detach(), std=pb_std)
+
             if save_traj:
                 traj.append(new_x.clone())
 
             x = new_x
+            t_prev = t.clone()
 
         return_dict['x'] = x
 

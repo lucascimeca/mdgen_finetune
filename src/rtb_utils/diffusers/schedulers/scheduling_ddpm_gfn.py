@@ -569,6 +569,61 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
         noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
         return noisy_samples
 
+    def step_noise(
+            self,
+            x: torch.FloatTensor,
+            t_source: int,
+            t_end: int,
+    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        """
+        Moves a noisy image x from time t_source to a later (noisier) time t_end based on the
+        forward diffusion process. This function computes the mean of the Gaussian transition
+        and returns the standard deviation corresponding to this jump.
+
+        The forward process is defined as:
+            x_t = sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * epsilon,   epsilon ~ N(0, I)
+
+        Given x at time t_source (x_{t_s}), the conditional distribution for x at t_end (x_{t_e}) is:
+            p(x_{t_e} | x_{t_s}) = N(mean, variance)
+        with:
+            mean = sqrt(alpha_bar_t_end / alpha_bar_t_source) * x_{t_s},
+            variance = 1 - (alpha_bar_t_end / alpha_bar_t_source),
+            std = sqrt(1 - (alpha_bar_t_end / alpha_bar_t_source)).
+
+        Args:
+            x (torch.FloatTensor): Noisy image at time t_source.
+            t_source (int): Current (less noisy) timestep.
+            t_end (int): Desired (more noisy) timestep.
+
+        Returns:
+            Tuple[torch.FloatTensor, torch.FloatTensor]: A tuple containing:
+                - mean: The noisified image (i.e. the mean of the Gaussian step).
+                - std: The standard deviation for the step.
+        """
+        # Ensure self.alphas_cumprod is on the same device and type as x.
+
+        assert t_end > t_source, "the time t_end must be greater than t_source"
+
+        self.alphas_cumprod = self.alphas_cumprod.to(device=x.device)
+        alphas_cumprod = self.alphas_cumprod.to(dtype=x.dtype)
+
+        # Retrieve cumulative alpha values for source and target timesteps.
+        alpha_source = alphas_cumprod[t_source]
+        alpha_end = alphas_cumprod[t_end]
+
+        # Compute scaling factor for the mean:
+        sqrt_ratio = (alpha_end / alpha_source) ** 0.5
+        mean = sqrt_ratio * x
+
+        # Compute the standard deviation for the Gaussian step:
+        std = (1 - (alpha_end / alpha_source)) ** 0.5
+
+        # Ensure proper broadcasting (similar to the add_noise function)
+        while len(mean.shape) < len(x.shape):
+            mean = mean.unsqueeze(-1)
+
+        return mean, std
+
     def get_velocity(
         self, sample: torch.FloatTensor, noise: torch.FloatTensor, timesteps: torch.IntTensor
     ) -> torch.FloatTensor:

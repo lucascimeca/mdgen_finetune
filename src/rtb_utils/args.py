@@ -121,13 +121,6 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args.system = system
 
-    if not args.use_cuda or 'win' in args.system or args.method in ['dp', 'fps']:
-        args.workers = 0
-
-    # --- PARTICLE ARGS
-    if 'fps' not in args.method:
-        args.particle_size = 1
-
     # --------- FINETUNING SPECIAL ARGS---------------
     # ---------  gradient accumulation ---------
     # if args.batch_size * args.accumulate_gradient_every < 32:

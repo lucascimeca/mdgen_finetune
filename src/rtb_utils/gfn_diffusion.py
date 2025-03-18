@@ -29,7 +29,6 @@ import wandb
 def get_DDPM_diffuser_pipeline(args, prior_model):
     """posterior policy diffusion gfn from hf diffusers """
 
-
     # Prior flow model pipeline
     prior_model.model.model = freeze_model(prior_model.model.model)
     prior_model.model.model = prior_model.model.model.eval()
@@ -368,29 +367,34 @@ class RTBTrainer(Trainer):
 
             if self.accelerator.is_main_process:
 
+                if self.config.method == 'tb':
+                    log_pf_prior_or_pb = results_dict['logpb']
+                else:
+                    log_pf_prior_or_pb = results_dict['logpf_prior']
+
                 if self.config.vargrad:
                     if cond.shape[0] > 1:
                         i = 0
                         estimates = []
                         while i < results_dict['x'].shape[0]:
                             estimates += [(- results_dict['logpf_posterior'][i:i+self.config.vargrad_sample_n0]
-                                           + results_dict['logpf_prior'][i:i+self.config.vargrad_sample_n0]
+                                           + log_pf_prior_or_pb[i:i+self.config.vargrad_sample_n0]
                                            + logr_x_prime[i:i+self.config.vargrad_sample_n0]).mean()] * self.config.vargrad_sample_n0
                             i += self.config.vargrad_sample_n0
                         self.sampler.logZ.data = torch.FloatTensor(estimates).to(self.config.device)
                     else:
-                        vargrad_logz = (- results_dict['logpf_posterior'] + results_dict['logpf_prior'] + logr_x_prime).mean()
+                        vargrad_logz = (- results_dict['logpf_posterior'] + log_pf_prior_or_pb + logr_x_prime).mean()
                         with torch.no_grad():
                             self.sampler.logZ.data = vargrad_logz
 
                 # compute loss rtb for posterior
-                loss = 0.5 * (((results_dict['logpf_posterior'] + self.sampler.logZ - results_dict['logpf_prior'] - logr_x_prime) ** 2)
+                loss = 0.5 * (((results_dict['logpf_posterior'] + self.sampler.logZ - log_pf_prior_or_pb - logr_x_prime) ** 2)
                               - self.config.learning_cutoff).relu()
 
                 if x_0 is None:
                     self.replay_buffer.add(x_0.detach(), logr_x_prime.detach(), loss.clone().detach())
 
-                results_dict['PF_divergence'] = (results_dict['logpf_posterior'] - results_dict['logpf_prior']).mean().item()
+                results_dict['PF_divergence'] = (results_dict['logpf_posterior'] - log_pf_prior_or_pb).mean().item()
 
         else:
             raise NotImplementedError("Back and forth not yet implemented")
