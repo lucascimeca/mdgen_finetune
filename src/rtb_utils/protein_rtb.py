@@ -96,20 +96,17 @@ class ProteinRTBModel(nn.Module):
         # Posterior noise model
         self.logZ = torch.nn.Parameter(torch.tensor(0.).to(self.device))
 
-        # shape as (C, H, W), then reshape to in-shape (64, 7) when passing to prior model
-        self.gfn_shape = (21, 2, 2)  # 10, 10)
+        # Prior flow model pipeline
+        self.prior_model = prior_model
+        self._freeze_model(self.prior_model.model.model)
+        self.prior_model.model.model = self.prior_model.model.model.eval()
 
-        self.mlp_dim = self.gfn_shape[0] * self.gfn_shape[1] * self.gfn_shape[2]
-
-        self.model = copy.deepcopy(prior_model.model.model).to(self.device)
+        # Prior & Trainable posterior
+        self.model = self._unfreeze_model(copy.deepcopy(self.prior_model.model.model)).train().to(self.device)
         safe_reinit(self.model)
 
         if not self.tb:
-            self.ref_model = copy.deepcopy(prior_model.model.model).to(self.device)
-            self._freeze_model(self.ref_model)
-
-        # Prior flow model pipeline
-        self.prior_model = prior_model
+            self.ref_model = copy.deepcopy(self.prior_model.model.model).to(self.device)
 
         self.reward_model = reward_model
 
@@ -124,8 +121,14 @@ class ProteinRTBModel(nn.Module):
             self.load_ckpt_path = load_ckpt_path
 
     def _freeze_model(self, model):
-        for param in self.ref_model.parameters():
+        for param in model.parameters():
             param.requires_grad = False
+        return model
+
+    def _unfreeze_model(self, model):
+        for param in model.parameters():
+            param.requires_grad = True
+        return model
 
     def get_cond_args(self):
         if self.cond_args is None:
@@ -212,6 +215,7 @@ class ProteinRTBModel(nn.Module):
                 entity=self.entity,
                 save_code=True,
                 name=run_name,
+                dir=self.tmp_dir,
                 config=self.config
             )
             hyperparams = {
@@ -411,7 +415,7 @@ class ProteinRTBModel(nn.Module):
 
         model_out = self.model(xt, t, **self.get_cond_args())
         # xt_r = xt.permute(0, )
-        posterior_drift = -self.sde.drift(t, xt) - (g ** 2) * model_out / self.sde.sigma(t).view(-1,*[1] * len(D))
+        posterior_drift = -self.sde.drift(t, xt) - (g ** 2) * model_out #/ self.sde.sigma(t).view(-1,*[1] * len(D))
 
         f_posterior = posterior_drift
         # compute parameters for denoising step (wrt posterior)
@@ -435,6 +439,7 @@ class ProteinRTBModel(nn.Module):
                 entity=self.entity,
                 save_code=True,
                 name=run_name,
+                dir=self.tmp_dir,
                 config=self.config
             )
         B = 64  # 32
@@ -513,13 +518,23 @@ class ProteinRTBModel(nn.Module):
                         lora_alpha=self.config.rank,
                         init_lora_weights="gaussian",
                         target_modules=[
-                            "conv",
-                            "in_layers.2",
-                            "in_layers.3",
-                            "emb_layers.1",
-                            "out_layers.3",
-                            "out.2",
-                            "op",
+                            # IPA layers – attention projections and feed-forward blocks
+                            "linear_q",
+                            "linear_kv",
+                            "linear_q_points",
+                            "linear_kv_points",
+                            "linear_out",
+                            "q_proj",
+                            "k_proj",
+                            "v_proj",
+                            "out_proj",
+                            "fc1",
+                            "fc2",
+                            # Projection from embedding back to latent space
+                            "emb_to_latent.linear",
+                            # Time embedder MLP layers (typically the 0th and 2nd layers are linear)
+                            "t_embedder.mlp.0",
+                            "t_embedder.mlp.2",
                         ],
                     )
                     self.model = get_peft_model(self.model, unet_lora_config).to(self.device)
@@ -540,6 +555,7 @@ class ProteinRTBModel(nn.Module):
                 entity=self.entity,
                 save_code=True,
                 name=run_name,
+                dir=self.tmp_dir,
                 config=self.config
             )
             hyperparams = {
@@ -691,8 +707,8 @@ class ProteinRTBModel(nn.Module):
         normal_dist = torch.distributions.Normal(torch.zeros((B,) + tuple(D), device=self.device),
                                                  torch.ones((B,) + tuple(D), device=self.device))
 
-        logpf_posterior = 0 * normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
-        logpb = 0 * normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(
+        logpf_posterior = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
+        logpb = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(
             self.device)  # torch.zeros_like(logpf_posterior)
         dt = -1 / (steps + 1)
 
@@ -704,9 +720,11 @@ class ProteinRTBModel(nn.Module):
             pbar.set_description(
                 f"Sampling from the {sampling_from} | t = {t[0].item():.1f} | sigma = {self.sde.sigma(t)[0].item():.1e}"
                 f"| scale ~ {x.std().item():.1e}")
+
+            g = self.sde.diffusion(t, x)
+            std = g * (np.abs(dt)) ** (1 / 2)
+
             if backward:
-                g = self.sde.diffusion(t, x)
-                std = g * (np.abs(dt)) ** (1 / 2)
                 x_prev = x.detach()
                 x = (x - self.sde.drift(t, x) * dt) + (std * torch.randn_like(x))
             else:
@@ -716,24 +734,18 @@ class ProteinRTBModel(nn.Module):
             if t[0] < self.sde.epsilon:  # Accounts for numerical error in the way we discretize t.
                 continue  # continue instead of break because it works for forward and backward
 
-            g = self.sde.diffusion(t, x)
-
             lp_correction = self.get_langevin_correction(x)
 
             model_out = self.model(x, t, **self.get_cond_args())
-            posterior_drift = -self.sde.drift(t, x) - (g ** 2) * (
+            posterior_drift = self.sde.drift(t, x) - (g ** 2) * (
                         model_out + lp_correction
-            ) / self.sde.sigma(t).view(-1, *[1] * len(D))
+            ) #/ self.sde.sigma(t).view(-1, *[1] * len(D))
 
             # compute parameters for denoising step (wrt posterior)
             x_mean_posterior = x + posterior_drift * dt  # * (-1.0 if backward else 1.0)
-            std = g * (np.abs(dt)) ** (1 / 2)
 
             # compute step
-            if prior_sample and not backward:
-                x = x - self.sde.drift(t, x) * dt + std * torch.randn_like(x)
-            elif not backward:
-                x = x_mean_posterior + std * torch.randn_like(x)
+            x = x_mean_posterior + std * torch.randn_like(x)
             x = x.detach()
 
             # compute parameters for pb
@@ -746,8 +758,8 @@ class ProteinRTBModel(nn.Module):
             else:
                 pb_drift = -self.sde.drift(t, x_prev)
                 x_mean_pb = x_prev + pb_drift * (dt)
-            # x_mean_pb = x_prev + pb_drift * (dt)
-            pb_std = g * (np.abs(dt)) ** (1 / 2)
+
+            pb_std = self.sde.diffusion(t + dt, x_prev) * (np.abs(dt)) ** (1 / 2)
 
             if save_traj:
                 traj.append(x.clone())
@@ -819,9 +831,8 @@ class ProteinRTBModel(nn.Module):
         normal_dist = torch.distributions.Normal(torch.zeros((B,) + tuple(D), device=self.device),
                                                  torch.ones((B,) + tuple(D), device=self.device))
 
-        logpf_posterior = 0 * normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
-        logpb = 0 * normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(
-            self.device)  # torch.zeros_like(logpf_posterior)
+        logpf_posterior = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
+        logpb = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)  # torch.zeros_like(logpf_posterior)
         dt = -1 / (steps + 1)
 
         #####
@@ -846,9 +857,7 @@ class ProteinRTBModel(nn.Module):
 
             g = self.sde.diffusion(t, x)
 
-            # lp_correction = self.get_langevin_correction(x)
-            model_out = self.model(x, t, **self.get_cond_args())
-            posterior_drift = -self.sde.drift(t, x) - (g ** 2) * model_out / self.sde.sigma(t).view(-1, *[1] * len(D))
+            posterior_drift = self.sde.drift(t, x) - (g ** 2) * self.model(x, t, **self.get_cond_args()) #/ self.sde.sigma(t).view(-1, *[1] * len(D))
 
             # compute parameters for denoising step (wrt posterior)
             x_mean_posterior = x + posterior_drift * dt  # * (-1.0 if backward else 1.0)
@@ -856,7 +865,7 @@ class ProteinRTBModel(nn.Module):
 
             # compute step
             if prior_sample and not backward:
-                x = x - self.sde.drift(t, x) * dt + std * torch.randn_like(x)
+                x = x + self.sde.drift(t, x) * dt + std * torch.randn_like(x)
             elif not backward:
                 x = x_mean_posterior + std * torch.randn_like(x)
             x = x.detach()
@@ -867,15 +876,13 @@ class ProteinRTBModel(nn.Module):
             # x_mean_pb = x + pb_drift * (-dt)
 
             if backward:
-                ref_drift = -self.sde.drift(t, x) - (g ** 2) * self.ref_model(x, t, **self.get_cond_args()) / self.sde.sigma(
+                pb_drift = -self.sde.drift(t, x) + (g ** 2) * self.ref_model(x, t, **self.get_cond_args()) / self.sde.sigma(
                     t).view(-1, *[1] * len(D))
-                pb_drift = ref_drift  # -self.sde.drift(t, x)
                 x_mean_pb = x + pb_drift * (dt)
             else:
-                ref_drift = -self.sde.drift(t, x_prev) - (g ** 2) * self.ref_model(x, t, **self.get_cond_args()) / self.sde.sigma(t).view(-1, *[1] * len(D))
-                pb_drift = ref_drift  # -self.sde.drift(t, x_prev)
+                pb_drift = self.sde.drift(t, x_prev) - (g ** 2) * self.ref_model(x, t, **self.get_cond_args()) #/ self.sde.sigma(t).view(-1, *[1] * len(D))
                 x_mean_pb = x_prev + pb_drift * (dt)
-            # x_mean_pb = x_prev + pb_drift * (dt)
+
             pb_std = g * (np.abs(dt)) ** (1 / 2)
 
             if save_traj:
@@ -936,7 +943,6 @@ class ProteinRTBModel(nn.Module):
 
         if backward:
             x = x_1
-            # timesteps = np.flip(timesteps)
             t = torch.zeros(B).to(self.device) + self.sde.epsilon
         else:
             x = self.sde.prior(D).sample([B]).to(self.device)
@@ -971,14 +977,14 @@ class ProteinRTBModel(nn.Module):
             if t[0] < self.sde.epsilon:  # Accounts for numerical error in the way we discretize t.
                 continue  # continue instead of break because it works for forward and backward
 
-            std = self.sde.diffusion(t, x, np.abs(dt))
+            g = self.sde.diffusion(t, x, np.abs(dt))
 
             lp_correction = self.get_langevin_correction(x)
-            posterior_drift = self.sde.drift(t, x, np.abs(dt)) + self.model(x, t, **self.get_cond_args()) + lp_correction  # / self.sde.sigma(t).view(-1, *[1]*len(D))
-            f_posterior = posterior_drift
+            posterior_drift = self.sde.drift(t, x, np.abs(dt)) - g ** 2 * self.model(x, t, **self.get_cond_args()) + lp_correction  # / self.sde.sigma(t).view(-1, *[1]*len(D))
+
             # compute parameters for denoising step (wrt posterior)
-            x_mean_posterior = x + f_posterior
-            # std = g * (np.abs(dt)) ** (1 / 2)
+            x_mean_posterior = x + posterior_drift * dt
+            std = g * (np.abs(dt)) ** (1 / 2)
 
             # compute step
             if prior_sample and not backward:
@@ -1064,8 +1070,7 @@ class ProteinRTBModel(nn.Module):
         else:
             x = traj[0].to(self.device)
 
-        no_grad_steps = random.sample(range(steps),
-                                      int(steps * 0.0))  # Sample detach_freq fraction of timesteps for no grad
+        no_grad_steps = random.sample(range(steps), int(steps * 0.0))  # Sample detach_freq fraction of timesteps for no grad
 
         # # assume x is gaussian noise
         # normal_dist = torch.distributions.Normal(torch.zeros((B,) + tuple(D), device=self.device),
@@ -1109,14 +1114,13 @@ class ProteinRTBModel(nn.Module):
             g = self.sde.diffusion(t_, xs).to(self.device)
 
             lp_correction = self.get_langevin_correction(xs)
-            f_posterior = -self.sde.drift(t_, xs) - g ** 2 * (
+            f_posterior = self.sde.drift(t_, xs) - g ** 2 * (
                         self.model(xs, t_[:, 0, 0, 0], **self.get_cond_args()) + lp_correction) / \
-                          self.sde.sigma(t_).view(-1,
-                                                  *[1] * len(D))
+                          self.sde.sigma(t_).view(-1, *[1] * len(D))
 
             # compute parameters for denoising step (wrt posterior)
             x_mean_posterior = xs + f_posterior * dts
-            std = g * (-dts) ** (1 / 2)
+            std = g * np.abs(dts) ** (1 / 2)
 
             # compute step
             if backward:
