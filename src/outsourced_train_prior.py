@@ -63,11 +63,11 @@ parser.add_argument('--save_path', default='~/scratch/CNF_RTB_ckpts/', type=str,
 parser.add_argument('--load_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')
 parser.add_argument('--load_path', default='../pretrained/', type=str, help='Path to load model checkpoint')
 
-parser.add_argument('--lora', default=True, type=strtobool, help='low rank approximation training.')
-parser.add_argument('--rank', default=32, type=int, help='lora rank.')
-
 parser.add_argument('--load_outsourced_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')
 parser.add_argument('--load_outsourced_path', default='../pretrained/', type=str, help='Path to load model checkpoint')
+
+parser.add_argument('--lora', default=True, type=strtobool, help='low rank approximation training.')
+parser.add_argument('--rank', default=32, type=int, help='lora rank.')
 
 parser.add_argument('--langevin', default=False, type=strtobool, help="Whether to use Langevin dynamics for sampling")
 parser.add_argument('--inference', default='vpsde', type=str, help='Inference method for prior', choices=['vpsde', 'ddpm'])

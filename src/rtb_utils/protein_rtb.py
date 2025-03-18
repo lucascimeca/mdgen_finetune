@@ -98,11 +98,11 @@ class ProteinRTBModel(nn.Module):
 
         # Prior flow model pipeline
         self.prior_model = prior_model
-        self._freeze_model(self.prior_model.model.model)
+        self.freeze_model(self.prior_model.model.model)
         self.prior_model.model.model = self.prior_model.model.model.eval()
 
         # Prior & Trainable posterior
-        self.model = self._unfreeze_model(copy.deepcopy(self.prior_model.model.model)).train().to(self.device)
+        self.model = self.unfreeze_model(copy.deepcopy(self.prior_model.model.model)).train().to(self.device)
         safe_reinit(self.model)
 
         if not self.tb:
@@ -119,16 +119,6 @@ class ProteinRTBModel(nn.Module):
             self.load_ckpt_path = os.path.expanduser(load_ckpt_path)
         else:
             self.load_ckpt_path = load_ckpt_path
-
-    def _freeze_model(self, model):
-        for param in model.parameters():
-            param.requires_grad = False
-        return model
-
-    def _unfreeze_model(self, model):
-        for param in model.parameters():
-            param.requires_grad = True
-        return model
 
     def get_cond_args(self):
         if self.cond_args is None:
@@ -621,9 +611,7 @@ class ProteinRTBModel(nn.Module):
                     # compute distribution change
                     if self.prior_model.target_dist is None:
                         print("data energy distribution has yet to be computed. Computing...")
-                        # save all the frames from the actual data
                         self.prior_model.fix_and_save_pdbs(torch.FloatTensor(self.prior_model.batch_arr))
-                        # save all the frames from the actual data
                         self.prior_model.target_dist = self.reward_model(self.prior_model.peptide,
                                                                          data_path=self.config.data_path,
                                                                          tmp_dir=self.prior_model.out_dir)

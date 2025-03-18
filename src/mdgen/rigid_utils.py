@@ -714,7 +714,7 @@ class Rotation:
         return Rotation(rot_mats=rot_mats, quats=None) 
 
     def map_tensor_fn(self, 
-        fn: Callable[torch.Tensor, torch.Tensor]
+        fn: Callable[[torch.Tensor], torch.Tensor]
     ) -> Rotation:
         """
             Apply a Tensor -> Tensor function to underlying rotation tensors,
@@ -1393,7 +1393,7 @@ class Rigid:
     def to(self, device):
         if self.device != device:
             if device == 'cpu':
-                return Rigid(self._rots.to('cpu'), self._trans.to('cpu'))
+                return Rigid(self._rots.to('cpu', dtype=self._rots.dtype), self._trans.to('cpu', dtype=self._rots.dtype))
             else:
                 return self.cuda()
         else:

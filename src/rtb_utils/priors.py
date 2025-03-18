@@ -16,6 +16,9 @@ import tqdm
 import numpy as np
 import pandas as pd
 
+from rtb_utils.pytorch_utils import get_batch
+
+
 class MDGenSimulator:
     def __init__(self,
                  sim_ckpt,
@@ -121,6 +124,20 @@ class MDGenSimulator:
             'seqres': seqres_tensor,
             'mask': mask,
         }
+
+    def get_cond_args(self, device):
+        item = get_batch(self.peptide,
+                         self.peptide,
+                         tps=self.tps,
+                         no_frames=self.model.args.no_frames,
+                         data_dir=self.data_dir,
+                         suffix=self.suffix)
+        batch = next(iter(torch.utils.data.DataLoader([item])))
+        prep = self.model.prep_batch(batch)
+        cond_args = prep['model_kwargs']
+        for k, v in cond_args.items():
+            cond_args[k] = v.to(device)
+        return cond_args
 
     def _rollout(self, batch, zs0=None):
         """
