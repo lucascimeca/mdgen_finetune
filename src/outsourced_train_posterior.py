@@ -42,7 +42,7 @@ prior_model = MDGenSimulator(
     num_frames=1,
     retain=args.test_sample_size,
     xtc=True,
-    out_dir=args.save_path,
+    out_dir=f"{args.save_folder}/samples/",
     suffix='_i100'
 )
 

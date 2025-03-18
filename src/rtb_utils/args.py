@@ -103,7 +103,6 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
 
     # Paths
     parser.add_argument('--splits_path', default='../splits/', type=str, help='Path to save model checkpoints')
-    parser.add_argument('--save_path', default='~/scratch/CNF_RTB_ckpts/', type=str, help='Path to save model checkpoints')
     parser.add_argument('--load_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')
 
     parser.add_argument('--load_outsourced_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')
