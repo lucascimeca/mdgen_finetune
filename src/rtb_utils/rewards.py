@@ -38,7 +38,7 @@ DEVICE = choose_device()
 
 class Amber14Reward(nn.Module):
     def __init__(self, device='CPU', implicit=False, friction_coeff=1.0,
-                 dt=2.0 * femtosecond, *args, **kwargs):
+                 dt=2.0 * femtosecond, energy_temperature=1., *args, **kwargs, ):
         """
         Initializes the reward function with the appropriate force field and simulation parameters.
 
@@ -54,6 +54,7 @@ class Amber14Reward(nn.Module):
         self.implicit = implicit
         self.friction_coeff = friction_coeff
         self.dt = dt
+        self.energy_temperature = energy_temperature
 
         # Select force field based on solvent model.
         if self.implicit:
@@ -132,7 +133,7 @@ class Amber14Reward(nn.Module):
         print(f"elapsed {t1 - t0}")
 
         return {
-            'log_r': -torch.FloatTensor(energies)/1e7,
+            'log_r': -torch.FloatTensor(energies)/self.energy_temperature,
             'x': traj.xyz
         }
 

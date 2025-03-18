@@ -40,9 +40,16 @@ export MASTER_ADDR="127.0.0.1"
 # Fixes issues with MIG-ed GPUs with versions of PyTorch < 2.0
 unset CUDA_VISIBLE_DEVICES
 
-python ../mdgen_rl_finetune.py --diffusion_steps 20 --batch_size 32 --save_path ~/scratch/mdgen/samples/ \
-                               --data_path ~/scratch/mdgen/data/ --splits_path ../../splits/ \
-                               --load_path ../../pretrained/ --tb True --learning_rate 5e-5  --inference vpsde \
-                               --beta_start $1 --loss_batch_size 32 --replay_buffer_prob .2 \
-                               --load_outsourced_path ../../pretrained/mdgen_source_sampler.pth \
-                               --clip 0.05 --replay_buffer uniform --wandb_track True
+#python ../mdgen_rl_finetune.py --diffusion_steps 20 --batch_size 32 --save_path ~/scratch/mdgen/samples/ \
+#                               --data_path ~/scratch/mdgen/data/ --splits_path ../../splits/ \
+#                               --load_path ../../pretrained/ --tb True --learning_rate 5e-5  --inference vpsde \
+#                               --beta_start $1 --loss_batch_size 32 --replay_buffer_prob .2 \
+#                               --load_outsourced_path ../../pretrained/mdgen_source_sampler.pth \
+#                               --clip 0.05 --replay_buffer uniform --wandb_track True
+
+python ../outsourced_train_posterior.py --traj_length 100 --sampling_length 20 --batch_size 32 --save_folder ~/scratch/mdgen/ \
+                                        --data_path ~/scratch/mdgen/data/ --splits_path ../../splits/ \
+                                        --load_path ../../pretrained/ --method rtb --learning_rate 6e-4 \
+                                        --energy_temperature $1 --vargrad_sample_n0 4 --test_sample_size 300 \
+                                        --load_outsourced_path ../../pretrained/mdgen_source_sampler.pth \
+                                        --push_to_wandb True --replace True ---load_outsourced_ckpt True

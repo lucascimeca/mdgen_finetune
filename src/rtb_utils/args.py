@@ -63,7 +63,6 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
 
     parser.add_argument('--peptide', type=str, default='FLRH', help='Peptide to use.')
 
-
     parser.add_argument('--traj_length', default=100, type=int, help='Legth of trajectory.')
     parser.add_argument('--sampling_length', default=100, type=int, help='Legth of sampling traj. If sampling_length < traj_length then DDPM automatically kicks in.')
     parser.add_argument('--learning_cutoff', default=1e-1, type=float, help='Cut-off for allowed closeness of prior/posterior given inpferfect TB assumption.')
