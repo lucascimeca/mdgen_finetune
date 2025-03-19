@@ -227,11 +227,12 @@ class Trainer:
                         it=it
                     )
 
-                for k, v in results_dict.items():
-                    if isinstance(v, torch.Tensor):
-                        results_dict[k] = v.mean().item()
-
                 if it % 5 == 0:
+
+                    for k, v in results_dict.items():
+                        if isinstance(v, torch.Tensor):
+                            results_dict[k] = v.mean().item()
+
                     wandb.log(data=results_dict, step=it)  # log results in wandb
 
                 torch.cuda.empty_cache()
