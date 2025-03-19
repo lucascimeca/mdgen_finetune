@@ -227,9 +227,9 @@ class Trainer:
                         it=it
                     )
 
-                    for k, v in results_dict.items():
-                        if isinstance(v, torch.Tensor):
-                            results_dict[k] = v.mean().item()
+                for k, v in results_dict.items():
+                    if isinstance(v, torch.Tensor):
+                        results_dict[k] = v.mean().item()
 
                 if it % 10 == 0:
                     wandb.log(data=results_dict, step=it)  # log results in wandb
