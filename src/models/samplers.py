@@ -99,6 +99,7 @@ class HGFNode(nn.Module):
             log_reward=None,
             lgv_clip=1e2,
             lgv_clipping=True,
+            peptide='',
     ):
 
         self.langevin = True
@@ -469,13 +470,13 @@ class PosteriorPriorDGFN(nn.Module):
                 # get posterior pf
                 return_dict['logpf_posterior'] += self.posterior_node.get_logpf(x=new_x)
 
-            pb_mean, pb_std = scheduler.step_noise(new_x, t_source=t, t_end=t_prev)
+            pb_mean, pb_std = scheduler.step_noise(new_x, x_start, t_source=t, t_end=t_prev)
             return_dict['logpb'] += self.prior_node.get_logpf(x=x.detach(), mean=pb_mean.detach(), std=pb_std)
 
             if save_traj:
                 traj.append(new_x.clone())
 
-            x = new_x
+            x = new_x.detach().clone()
             t_prev = t.clone()
 
         return_dict['x'] = x

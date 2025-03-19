@@ -572,57 +572,67 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
     def step_noise(
             self,
             x: torch.FloatTensor,
+            noise: torch.FloatTensor,
             t_source: int,
             t_end: int,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """
-        Moves a noisy image x from time t_source to a later (noisier) time t_end based on the
-        forward diffusion process. This function computes the mean of the Gaussian transition
-        and returns the standard deviation corresponding to this jump.
+        Deterministically moves a sample x from time t_source to t_end along the
+        forward (noising) process trajectory. Here, t=0 corresponds to the clean image x0,
+        and t=T corresponds to the provided noise.
 
-        The forward process is defined as:
-            x_t = sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * epsilon,   epsilon ~ N(0, I)
+        The forward process is:
+            x_t = sqrt(ᾱ_t) * x0 + sqrt(1 - ᾱ_t) * noise.
 
-        Given x at time t_source (x_{t_s}), the conditional distribution for x at t_end (x_{t_e}) is:
-            p(x_{t_e} | x_{t_s}) = N(mean, variance)
-        with:
-            mean = sqrt(alpha_bar_t_end / alpha_bar_t_source) * x_{t_s},
-            variance = 1 - (alpha_bar_t_end / alpha_bar_t_source),
-            std = sqrt(1 - (alpha_bar_t_end / alpha_bar_t_source)).
+        Given a sample at time t_source:
+            x_{t_s} = sqrt(ᾱ_{t_s}) * x0 + sqrt(1 - ᾱ_{t_s}) * noise,
+        we can express x0 as:
+            x0 = (x_{t_s} - sqrt(1 - ᾱ_{t_s}) * noise) / sqrt(ᾱ_{t_s}),
+        and then the state at time t_end is:
+            x_{t_e} = sqrt(ᾱ_{t_e}) * x0 + sqrt(1 - ᾱ_{t_e}) * noise.
+
+        Substituting, we obtain:
+            x_{t_e} = sqrt(ᾱ_{t_e} / ᾱ_{t_s}) * x_{t_s} +
+                      (sqrt(1 - ᾱ_{t_e}) - sqrt(ᾱ_{t_e} / ᾱ_{t_s}) * sqrt(1 - ᾱ_{t_s})) * noise.
+
+        This function returns the new sample and the effective standard deviation (i.e. the noise coefficient)
+        of this step.
 
         Args:
-            x (torch.FloatTensor): Noisy image at time t_source.
-            t_source (int): Current (less noisy) timestep.
-            t_end (int): Desired (more noisy) timestep.
+            x (torch.FloatTensor): Sample at time t_source.
+            noise (torch.FloatTensor): The fixed noise tensor (endpoint at t=T).
+            t_source (int): Current timestep (less noisy).
+            t_end (int): Desired timestep (more noisy).
 
         Returns:
-            Tuple[torch.FloatTensor, torch.FloatTensor]: A tuple containing:
-                - mean: The noisified image (i.e. the mean of the Gaussian step).
-                - std: The standard deviation for the step.
+            Tuple[torch.FloatTensor, torch.FloatTensor]:
+                - x_noised: The sample at time t_end.
+                - noise_coeff: The effective coefficient applied to noise (i.e. the step's standard deviation).
         """
-        # Ensure self.alphas_cumprod is on the same device and type as x.
-
-        assert t_end > t_source, "the time t_end must be greater than t_source"
-
+        # Ensure alphas_cumprod is on the proper device and type.
         self.alphas_cumprod = self.alphas_cumprod.to(device=x.device)
         alphas_cumprod = self.alphas_cumprod.to(dtype=x.dtype)
 
-        # Retrieve cumulative alpha values for source and target timesteps.
-        alpha_source = alphas_cumprod[t_source]
-        alpha_end = alphas_cumprod[t_end]
+        # Get cumulative alpha values for source and target.
+        a_source = alphas_cumprod[t_source]
+        a_end = alphas_cumprod[t_end]
 
-        # Compute scaling factor for the mean:
-        sqrt_ratio = (alpha_end / alpha_source) ** 0.5
-        mean = sqrt_ratio * x
+        # Compute the scaling factor for the current state.
+        x_scale = (a_end / a_source) ** 0.5
 
-        # Compute the standard deviation for the Gaussian step:
-        std = (1 - (alpha_end / alpha_source)) ** 0.5
+        # Compute the effective noise coefficient for the transition.
+        noise_coeff = (1 - a_end) ** 0.5 - x_scale * (1 - a_source) ** 0.5
 
-        # Ensure proper broadcasting (similar to the add_noise function)
-        while len(mean.shape) < len(x.shape):
-            mean = mean.unsqueeze(-1)
+        # Broadcast scalars to the shape of x.
+        while len(x_scale.shape) < len(x.shape):
+            x_scale = x_scale.unsqueeze(-1)
+        while len(noise_coeff.shape) < len(x.shape):
+            noise_coeff = noise_coeff.unsqueeze(-1)
 
-        return mean, std
+        # Deterministically compute the new state.
+        x_noised = x_scale * x + noise_coeff * noise
+
+        return x_noised, noise_coeff
 
     def get_velocity(
         self, sample: torch.FloatTensor, noise: torch.FloatTensor, timesteps: torch.IntTensor

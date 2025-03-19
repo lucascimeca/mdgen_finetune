@@ -213,7 +213,6 @@ class Trainer:
                 self.logger.log(results_dict)  # log results locally
 
                 if it % 50 == 0:
-
                     plot_logs = self.generate_plots(results_dict, **sampler_kwargs)
 
                     results_dict.update(plot_logs)
@@ -232,6 +231,7 @@ class Trainer:
                         if isinstance(v, torch.Tensor):
                             results_dict[k] = v.mean().item()
 
+                if it % 10 == 0:
                     wandb.log(data=results_dict, step=it)  # log results in wandb
 
                 torch.cuda.empty_cache()
