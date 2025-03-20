@@ -621,18 +621,19 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
         x_scale = (a_end / a_source) ** 0.5
 
         # Compute the effective noise coefficient for the transition.
-        noise_coeff = (1 - a_end) ** 0.5 - x_scale * (1 - a_source) ** 0.5
+        std = (1 - a_end) ** 0.5 - x_scale * (1 - a_source) ** 0.5
 
         # Broadcast scalars to the shape of x.
         while len(x_scale.shape) < len(x.shape):
             x_scale = x_scale.unsqueeze(-1)
-        while len(noise_coeff.shape) < len(x.shape):
-            noise_coeff = noise_coeff.unsqueeze(-1)
+        while len(std.shape) < len(x.shape):
+            std = std.unsqueeze(-1)
 
         # Deterministically compute the new state.
-        x_noised = x_scale * x + noise_coeff * noise
+        mean = x_scale * x
+        x_noised = mean + std * noise
 
-        return x_noised, noise_coeff
+        return x_noised, mean, std
 
     def get_velocity(
         self, sample: torch.FloatTensor, noise: torch.FloatTensor, timesteps: torch.IntTensor

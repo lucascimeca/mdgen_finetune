@@ -5,6 +5,7 @@ import numpy as np
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 class ReplayBuffer:
     def __init__(self, rb_size=1000, rb_sample_strategy='uniform', rb_beta=1.0):
         self.buffer_size = rb_size

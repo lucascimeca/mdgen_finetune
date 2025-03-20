@@ -344,8 +344,8 @@ class RTBTrainer(Trainer):
             logr_x_prime = None
             x_0 = None
 
-            # todo base rb on ratio from args
-            if self.config.replay_buffer and it > 0 and it % 2 == 0:
+            if self.config.replay_buffer and it > self.config.batch_size and random.random() < self.config.rb_ratio:
+                print("REPLAY BUFFER")
                 x_0, logr_x_prime = self.replay_buffer.sample(batch_size)
 
             # sample x
@@ -366,7 +366,6 @@ class RTBTrainer(Trainer):
                     tmp_dir=self.sampler.prior_model.out_dir
                 )  # compute reward of whatever is in data_path, then cleans it up
                 logr_x_prime = rwd_logs['log_r'].to(self.sampler.device)
-                x_0 = rwd_logs['x']
 
             self.running_dist = logr_x_prime
 
@@ -397,7 +396,7 @@ class RTBTrainer(Trainer):
                               - self.config.learning_cutoff).relu()
 
                 if x_0 is None:
-                    self.replay_buffer.add(x_0.detach(), logr_x_prime.detach(), loss.clone().detach())
+                    self.replay_buffer.add(results_dict['x'].detach(), logr_x_prime.detach(), loss.clone().detach())
 
                 results_dict['PF_divergence'] = (results_dict['logpf_posterior'] - log_pf_prior_or_pb).mean().item()
 

@@ -82,7 +82,8 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     parser.add_argument('--prior_sampling_every', type=int, default=200, help='Every how many iterations to sample from prior.')
 
     parser.add_argument('-rb', '--replay_buffer', type=strtobool, default=False, help='Whether to use replay buffer.')
-    parser.add_argument('--rb_every', type=int, default=8, help='after how many epochs to do rb sampling.')
+    # parser.add_argument('--rb_every', type=int, default=8, help='after how many epochs to do rb sampling.')
+    parser.add_argument('--rb_ratio', type=float, default=.2, help='after how many epochs to do rb sampling.')
     parser.add_argument('--rb_size', default=1000, type=int, help='Max size of replay buffer.')
     parser.add_argument('--rb_sample_strategy', default='uniform', type=str, help='Sampling strategy from replay buffer (uniform/reward)')
     parser.add_argument('--rb_beta', default=1.0, type=float, help='Inverse temperature of sampling disctribution (unused for uniform)')
