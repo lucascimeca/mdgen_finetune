@@ -378,7 +378,7 @@ class RTBTrainer(Trainer):
                     log_pf_prior_or_pb = results_dict['logpf_prior']
 
                 if self.config.vargrad:
-                    if cond.shape[0] > 1:
+                    if cond['x_cond'].shape[0] > 1:
                         i = 0
                         estimates = []
                         while i < results_dict['x'].shape[0]:

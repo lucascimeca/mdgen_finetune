@@ -144,7 +144,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
         'batch_size',
         'learning_rate',
         'energy_temperature',
-        # 'vargrad_sample_n0',
+        'vargrad',
         # 'test_sample_size',
         'load_outsourced_ckpt'
     ]
