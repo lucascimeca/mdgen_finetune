@@ -146,7 +146,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
         'learning_rate',
         'energy_temperature',
         'vargrad',
-        'rb',
+        'replay_buffer',
         'load_outsourced_ckpt'
     ]
     args.exp_name = f"{'_'.join([f'{k}_{args.__dict__[k]}' for k in exp_critical_args])}"
