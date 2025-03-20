@@ -3,6 +3,7 @@ import os
 import lpips
 from typing import Optional, Union
 
+import diffusers
 from diffusers import DDIMPipeline, LDMPipeline, ScoreSdeVeScheduler, DDIMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from peft import PeftConfig, PeftModel, load_peft_weights, set_peft_model_state_dict
@@ -932,7 +933,7 @@ class PosteriorPriorDGFN(nn.Module):
         torch.save({
             "it": it,
             "optimizer_state_dict": opt.state_dict(),
-            "logZ": logZ
+            "logZ": logZ,
         }, folder + "checkpoint.tar")
 
         if isinstance(self.posterior_node.policy.unet, nn.DataParallel):
@@ -952,9 +953,11 @@ class PosteriorPriorDGFN(nn.Module):
                     ignore_patterns=["step_*", "epoch_*", "wandb*"],
                 )
         else:
-
-            pipeline = DDIMPipeline(unet=model, scheduler=self.posterior_node.policy.scheduler)
-            pipeline.save_pretrained(folder)
+            if isinstance(model, diffusers.ModelMixin):
+                pipeline = DDIMPipeline(unet=model, scheduler=self.posterior_node.policy.scheduler)
+                pipeline.save_pretrained(folder)
+            else:
+                torch.save(model.state_dict(), folder + "posterior_model.bin")
 
     def load(self, folder):
 
@@ -964,14 +967,20 @@ class PosteriorPriorDGFN(nn.Module):
             model = self.posterior_node.policy.unet
 
         if self.lora:
+
             # attach lora posterior
             lora_weights = load_peft_weights(folder)
             set_peft_model_state_dict(model, lora_weights)
 
         else:
-            pipeline = DDIMPipeline.from_pretrained(folder)
-            self.posterior_node.policy = pipeline
-            # self.posterior_node.policy.unet = nn.DataParallel(self.posterior_node.policy.unet)
+            if isinstance(model, diffusers.models.ModelMixin):  # this is a diffusers model
+                pipeline = DDIMPipeline.from_pretrained(folder)
+                self.posterior_node.policy = pipeline
+            else:
+                # note this assumes the "scheduler" in the pipeline is compatible with the saved model
+                model.load_state_dict(torch.load(folder + "posterior_model.bin"))
+                self.posterior_node.policy.unet = model
+
 
 class PosteriorPriorBaselineSampler(PosteriorPriorDGFN):
 

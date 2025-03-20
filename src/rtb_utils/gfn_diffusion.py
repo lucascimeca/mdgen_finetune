@@ -169,7 +169,7 @@ class Trainer:
                 mode='online' if self.config.push_to_wandb else "offline",
                 config={k: str(val) if isinstance(val, (list, tuple)) else val for k, val in self.config.__dict__.items()},
                 notes=self.config.notes,
-                name=f"{self.config.exp_name.split('_')[-1]}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                name=self.config.exp_name
             )
             self.checkpoint_dir = f"{self.config.save_folder}checkpoints/"
             self.checkpoint_file = self.checkpoint_dir + "checkpoint.tar"
