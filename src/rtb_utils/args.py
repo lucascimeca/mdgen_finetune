@@ -142,11 +142,11 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     exp_critical_args = [
         # 'traj_length',
         # 'sampling_length',
-        'batch_size',
+        # 'batch_size',
         'learning_rate',
         'energy_temperature',
         'vargrad',
-        # 'test_sample_size',
+        'rb',
         'load_outsourced_ckpt'
     ]
     args.exp_name = f"{'_'.join([f'{k}_{args.__dict__[k]}' for k in exp_critical_args])}"
