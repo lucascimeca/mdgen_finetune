@@ -52,4 +52,4 @@ python ../outsourced_train_posterior.py --epochs 3000 --traj_length 100 --sampli
                                         --method tb --learning_rate 6e-4 --energy_temperature $1 \
                                         --vargrad_sample_n0 4 --test_sample_size 300 \
                                         --load_outsourced_path ../../pretrained/mdgen_source_sampler.pth \
-                                        --push_to_wandb True --replace False --load_outsourced_ckpt True
+                                        --push_to_wandb True --replace True --load_outsourced_ckpt True
