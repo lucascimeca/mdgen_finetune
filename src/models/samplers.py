@@ -460,7 +460,7 @@ class PosteriorPriorDGFN(nn.Module):
                 # get posterior pf
                 return_dict['logpf_posterior'] += self.posterior_node.get_logpf(x=new_x)
 
-            pb_mean, _, pb_std = scheduler.step_noise(new_x, x_start, t_source=t, t_end=t_prev)
+            _, pb_mean, pb_std = scheduler.step_noise(new_x, x_start, t_source=t, t_end=t_prev)
             return_dict['logpb'] += self.prior_node.get_logpf(x=x.detach(), mean=pb_mean.detach(), std=pb_std)
 
             if save_traj:
