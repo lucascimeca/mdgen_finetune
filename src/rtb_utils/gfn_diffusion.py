@@ -221,6 +221,7 @@ class Trainer:
                     self.logger.save()  # save logs file locally
 
                     self.sampler.save(
+                        logZ=self.sampler.logZ.item(),
                         folder=self.checkpoint_dir,
                         opt=self.opt,
                         push_to_hf=self.config.lora and it % 1000 == 0,
@@ -242,6 +243,7 @@ class Trainer:
         self.accelerator.wait_for_everyone()
         if self.accelerator.is_main_process:
             self.sampler.save(
+                logZ=self.sampler.logZ.item(),
                 folder=self.checkpoint_dir,
                 opt=self.opt,
                 push_to_hf=True,
@@ -317,11 +319,11 @@ class RTBTrainer(Trainer):
 
     def resume(self):
         """handles resuming of training from experiment folder"""
-        if wandb.run.resumed and file_exists(self.checkpoint_file):
+        if file_exists(self.checkpoint_file):
             checkpoint = torch.load(self.checkpoint_file)
             self.sampler.load(self.checkpoint_dir)
-            params = [param for param in self.sampler.posterior_node.get_unet_parameters() if param.requires_grad]
             self.sampler.logZ = torch.nn.Parameter(torch.tensor(checkpoint["logZ"]).to(self.sampler.device))
+            params = [param for param in self.sampler.posterior_node.get_unet_parameters() if param.requires_grad]
             self.opt = type(self.opt.optimizer)([{'params': params,
                                                   'lr': self.config.lr},
                                                  {'params': [self.sampler.logZ],

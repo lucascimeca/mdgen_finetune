@@ -52,5 +52,5 @@ python ../outsourced_train_posterior.py --epochs 5000 --traj_length 100 --sampli
                                         --method tb --learning_rate 1e-3 --energy_temperature $1 \
                                         --vargrad True --vargrad_sample_n0 4 --test_sample_size 300 \
                                         --load_outsourced_path ../../pretrained/mdgen_source_sampler.pth \
-                                        --push_to_wandb True --replace True --load_outsourced_ckpt True \
+                                        --push_to_wandb True --resume True --load_outsourced_ckpt True \
                                         --rb_ratio .2 -rb True

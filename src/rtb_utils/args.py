@@ -29,7 +29,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     parser.add_argument('-sf', '--save_folder', type=str, default="./../results", help='Path to save results to.')
     parser.add_argument('-pf', '--load_path', type=str, default="../pretrained", help="Folder to keep pretrained 'best' weights.")
     parser.add_argument('-dp', '--data_path', type=str, default=f"{home_folder}/data", help="Folder containing datasets.")
-    parser.add_argument('-rp', '--replace', type=strtobool, default=True, help='Replace run logs.')  # todo: replace true
+    parser.add_argument('-rp', '--resume', type=strtobool, default=True, help='Replace run logs.')  # todo: replace true
 
     parser.add_argument('-fs', '--show_figures', type=strtobool, default=False, help='show plots.')
     parser.add_argument('-fo', '--save_figures', type=strtobool, default=True, help='save plots.')
@@ -157,7 +157,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     if experiment_run:
         num = 0
         save_folder_name = f"{args.save_folder}/{args.exp_name}_{num}/"
-        if not args.replace:
+        if not args.resume:
             num = 0
             while folder_exists(save_folder_name):
                 num += 1
