@@ -146,7 +146,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
         # 'traj_length',
         # 'sampling_length',
         # 'batch_size',
-        'learning_rate',
+        'method',
         'energy_temperature',
         'vargrad',
         'replay_buffer',
