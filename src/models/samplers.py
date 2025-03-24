@@ -954,7 +954,7 @@ class PosteriorPriorDGFN(nn.Module):
                 pipeline = DDIMPipeline(unet=model, scheduler=self.posterior_node.policy.scheduler)
                 pipeline.save_pretrained(folder)
             else:
-                torch.save(model.state_dict(), folder + "posterior_model.bin")
+                torch.save(model.state_dict(), folder + "mdgen_source_sampler.bin")
 
     def load(self, folder):
 
@@ -975,7 +975,7 @@ class PosteriorPriorDGFN(nn.Module):
                 self.posterior_node.policy = pipeline
             else:
                 # note this assumes the "scheduler" in the pipeline is compatible with the saved model
-                model.load_state_dict(torch.load(folder + "posterior_model.bin"))
+                model.load_state_dict(torch.load(folder + "mdgen_source_sampler.bin"))
                 self.posterior_node.policy.unet = model
 
 
