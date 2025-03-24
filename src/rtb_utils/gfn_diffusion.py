@@ -46,7 +46,7 @@ def get_DDPM_diffuser_pipeline(args, prior_model, outsourced_sampler=None):
         if args.load_outsourced_ckpt:
             print("Loading pretrained outsourced model...")
             checkpoint = torch.load(args.load_outsourced_path)
-            outsourced_posterior.load_state_dict(checkpoint['model_state_dict'])
+            outsourced_posterior.load_state_dict(checkpoint)
             print("Pretrained outsourced model loaded.")
         else:
             safe_reinit(outsourced_posterior)
