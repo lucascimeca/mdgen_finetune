@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import mdgen.rigid_utils
 from mdgen.model.latent_model import LatentMDGenModel
 from rtb_utils.plot_utils import compare_distributions, plot_relative_distance_distributions
-from rtb_utils.pytorch_utils import safe_reinit, get_batch, create_batches
+from rtb_utils.pytorch_utils import safe_reinit, get_batch, create_batches, freeze_model, unfreeze_model
 
 os.environ['PYMOL_QUIET'] = '1'
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
@@ -52,6 +52,7 @@ class ProteinRTBModel(nn.Module):
                  loss_batch_size=64,
                  replay_buffer=None,
                  orig_scale=1.,
+                 gfn_sampler=None,
                  config={}
                  ):
         super().__init__()
@@ -72,6 +73,8 @@ class ProteinRTBModel(nn.Module):
                 orig_scale=orig_scale
             )
         self.sde_type = self.sde.sde_type
+
+        self.gfn_sampler = gfn_sampler
 
         self.steps = diffusion_steps
         self.reward_args = reward_args
@@ -98,11 +101,11 @@ class ProteinRTBModel(nn.Module):
 
         # Prior flow model pipeline
         self.prior_model = prior_model
-        self.freeze_model(self.prior_model.model.model)
+        freeze_model(self.prior_model.model.model)
         self.prior_model.model.model = self.prior_model.model.model.eval()
 
         # Prior & Trainable posterior
-        self.model = self.unfreeze_model(copy.deepcopy(self.prior_model.model.model)).train().to(self.device)
+        self.model = unfreeze_model(copy.deepcopy(self.prior_model.model.model)).train().to(self.device)
         safe_reinit(self.model)
 
         if not self.tb:
@@ -418,10 +421,11 @@ class ProteinRTBModel(nn.Module):
 
         # do denoising score matching to pretrain gfn
 
-    def denoising_score_matching_unif(self, n_iters=1000, learning_rate=5e-5, clip=0.1):
+    def denoising_score_matching_unif(self, shape, n_iters=1000, learning_rate=5e-5, clip=0.1):
         param_list = [{'params': self.model.parameters()}]
         optimizer = torch.optim.Adam(param_list, lr=learning_rate)
         run_name = '../pretrained/DSM_unif_' + "unet_type" + self.id  # + '_sde_' + self.sde_type +'_steps_' + str(self.steps) + '_lr_' + str(learning_rate)
+        self.tmp_dir = os.path.expanduser("~/scratch/CNF_tmp/" + run_name + '/')
 
         if self.wandb_track:
             wandb.init(
@@ -439,6 +443,7 @@ class ProteinRTBModel(nn.Module):
         else:
             load_it = 0
 
+        self.running_dist = torch.FloatTensor([])
         for it in range(load_it, load_it + n_iters):
             optimizer.zero_grad()
 
@@ -466,13 +471,35 @@ class ProteinRTBModel(nn.Module):
 
             print("Iteration {}, Loss: {:.4f}".format(it, loss.item()))
 
-            if self.wandb_track and not it % 100 == 0:
-                wandb.log({"loss": loss.item(), "epoch": it})
+            if self.wandb_track:
 
-            if self.wandb_track and it % 100 == 0:
-                wandb.log({"loss": loss.item(), "epoch": it})
-                self.save_checkpoint(self.model, optimizer, it, run_name)
+                if self.prior_model.target_dist is None:
+                    print("data energy distribution has yet to be computed. Computing...")
+                    self.prior_model.fix_and_save_pdbs(torch.FloatTensor(self.prior_model.batch_arr))
+                    self.prior_model.target_dist = self.reward_model(self.prior_model.peptide,
+                                                                     data_path=self.config.data_path,
+                                                                     tmp_dir=self.prior_model.out_dir)
+                    print("Done!")
 
+                logs = {"loss": loss.item(), "epoch": it}
+
+                if it % 100 == 0:
+                    self.save_checkpoint(self.model, optimizer, it, run_name)
+
+                    batch_logs = self.batched_rtb(shape=shape)
+
+                    logs.update(compare_distributions(
+                        self.prior_model.target_dist['log_r'].detach().cpu(),
+                        batch_logs['logr'].detach().cpu())
+                    )
+                    logs.update(plot_relative_distance_distributions(
+                        xyz=batch_logs['x'],
+                        n_plots=4,  # Show 4 comparison columns
+                        target_dist=self.prior_model.target_dist['x']
+                    ))
+
+
+                wandb.log(logs)
         return
 
     def finetune(self, shape, n_iters=100000, learning_rate=5e-5, clip=0.1, prior_sample_prob=0.0,

@@ -1,50 +1,59 @@
-from collections import deque
-from datetime import datetime
-from functools import partial
-import random
+import diffusers
 
-from accelerate import Accelerator
-from matplotlib import pyplot as plt
-
-from rtb_utils.diffusers.pipelines.ddpm_gfn.pipeline_ddpm import DDPMGFNPipeline
-from rtb_utils.diffusers.schedulers.scheduling_ddpm_gfn import DDPMGFNScheduler
-from peft import LoraConfig, get_peft_model, PeftConfig, PeftModel, load_peft_weights, set_peft_model_state_dict
-from huggingface_hub import hf_hub_download
-
-from models.samplers import PosteriorPriorDGFN, PosteriorPriorDGFN, PosteriorPriorBaselineSampler
-from rtb_utils.plot_utils import compare_distributions, plot_relative_distance_distributions
+from diffusers import DDPMPipeline, DDPMScheduler
+from peft import LoraConfig, get_peft_model
 from rtb_utils.pytorch_utils import NoContext, freeze_model, unfreeze_model, safe_reinit, Logger
-from torchvision import transforms
+from rtb_utils.plot_utils import compare_distributions, plot_relative_distance_distributions
+from models.samplers import PosteriorPriorDGFN, PosteriorPriorDGFN, PosteriorPriorBaselineSampler
 
 from rtb_utils.replay_buffer import ReplayBuffer
+from datetime import datetime
+from diffusers.training_utils import compute_snr
+from rtb_utils.diffusers.schedulers.scheduling_ddpm_gfn import DDPMGFNScheduler
+from random import random
 from rtb_utils.simple_io import *
 
-import torch
-import torch.nn as nn
+from diffusers.utils import make_image_grid
+from huggingface_hub import create_repo, upload_folder
+from pathlib import Path
+from tqdm.auto import tqdm
+from accelerate import Accelerator
+
+from rtb_utils.diffusers.pipelines.ddpm_gfn.pipeline_ddpm import DDPMGFNPipeline
+from rtb_utils.simple_io import DictObj, folder_create
+
+import random
 import copy
-import os
 import wandb
 
+import os
+import torch
+import torch.nn.functional as F
+import huggingface_hub as hb
 
-def get_DDPM_diffuser_pipeline(args, prior_model):
+
+def get_DDPM_diffuser_pipeline(args, prior_model, outsourced_sampler=None):
     """posterior policy diffusion gfn from hf diffusers """
 
     # Prior flow model pipeline
     prior_model.model.model = freeze_model(prior_model.model.model)
     prior_model.model.model = prior_model.model.model.eval()
 
-    # Prior & Trainable posterior
-    outsourced_posterior = unfreeze_model(copy.deepcopy(prior_model.model.model)).train().to(args.device)
+    if outsourced_sampler is None:
+        # Prior & Trainable posterior
+        outsourced_posterior = unfreeze_model(copy.deepcopy(prior_model.model.model)).train().to(args.device)
 
-    if args.load_outsourced_ckpt:
-        print("Loading pretrained outsourced model...")
-        checkpoint = torch.load(args.load_outsourced_path)
-        outsourced_posterior.load_state_dict(checkpoint['model_state_dict'])
-        print("Pretrained outsourced model loaded.")
+        if args.load_outsourced_ckpt:
+            print("Loading pretrained outsourced model...")
+            checkpoint = torch.load(args.load_outsourced_path)
+            outsourced_posterior.load_state_dict(checkpoint['model_state_dict'])
+            print("Pretrained outsourced model loaded.")
+        else:
+            safe_reinit(outsourced_posterior)
     else:
-        safe_reinit(outsourced_posterior)
+        outsourced_posterior = outsourced_sampler
 
-    outsourced_prior = copy.deepcopy(prior_model.model.model).to(args.device)
+    outsourced_prior = freeze_model(copy.deepcopy(outsourced_posterior)).eval().to(args.device)
 
     if args.lora:
         unet_lora_config = LoraConfig(
@@ -78,7 +87,7 @@ def get_DDPM_diffuser_pipeline(args, prior_model):
         beta_end=0.02,
         beta_schedule="linear",
         beta_start=0.0001,
-        clip_sample=True,
+        clip_sample=False,
         variance_type='fixed_large'
     )
 
@@ -213,7 +222,13 @@ class Trainer:
                 self.logger.log(results_dict)  # log results locally
 
                 if it % 50 == 0:
-                    plot_logs = self.generate_plots(results_dict, **sampler_kwargs)
+                    plot_logs = self.generate_plots(
+                        prior_model=self.sampler.prior_model,
+                        reward_function=self.reward_function,
+                        sampler=self.sampler,
+                        config=self.config,
+                        cond_args=self.cond_args
+                    )
 
                     results_dict.update(plot_logs)
 
@@ -261,42 +276,44 @@ class Trainer:
     def generate_plots(self, *args, **kwargs):
         raise NotImplementedError()
 
-class FinetunePlotter:
-    def generate_plots(self, batch_logs, long=False, *args, **kwargs):
+
+class FinetunePlotter: # self.sampler.prior_model, self.reward_function, self.sampler, self.config, self.sampler.config.data_path, self.cond_args
+    @staticmethod
+    def generate_plots(prior_model, reward_function, sampler, config, cond_args):
         """generate plots for current prior/posterior modeled distribution"""
         logs = {}
-        context = NoContext() if self.sampler.config.method in ['dps', 'fps'] else torch.no_grad()
+        context = NoContext() if config.method in ['dps', 'fps'] else torch.no_grad()
         with context:
             # compute distribution change
-            if self.sampler.prior_model.target_dist is None:
+            if prior_model.target_dist is None:
                 print("data energy distribution has yet to be computed. Computing...")
                 # save all the frames from the actual data
-                self.sampler.prior_model.fix_and_save_pdbs(torch.FloatTensor(self.sampler.prior_model.batch_arr))
+                prior_model.fix_and_save_pdbs(torch.FloatTensor(prior_model.batch_arr))
                 # save all the frames from the actual data
-                self.sampler.prior_model.target_dist = self.reward_function(self.sampler.prior_model.peptide,
-                                                                            data_path=self.sampler.config.data_path,
-                                                                            tmp_dir=self.sampler.prior_model.out_dir)
+                prior_model.target_dist = reward_function(prior_model.peptide,
+                                                          data_path=config.data_path,
+                                                          tmp_dir=prior_model.out_dir)
                 print("Done!")
 
             print("Generating energy distribution for current model iteration")
-            results_dict = self.sampler(batch_size=self.config.test_sample_size, condition=self.cond_args)
-            self.sampler.prior_model.sample(zs0=results_dict['x'])  # sample in place, forms pdbs on disk
-            rwd_logs = self.reward_function(
-                self.sampler.prior_model.peptide,
-                data_path=self.sampler.config.data_path,
-                tmp_dir=self.sampler.prior_model.out_dir
+            results_dict = sampler(batch_size=config.test_sample_size, x_shape=prior_model.dims[1:], condition=cond_args)
+            prior_model.sample(zs0=results_dict['x'])  # sample in place, forms pdbs on disk
+            rwd_logs = reward_function(
+                prior_model.peptide,
+                data_path=sampler.config.data_path,
+                tmp_dir=sampler.prior_model.out_dir
             )  # compute reward of whatever is in data_path, then cleans it up
-            running_dist = rwd_logs['log_r'].to(self.sampler.device)
+            running_dist = rwd_logs['log_r'].to(sampler.device)
 
             print("Distribution generated!")
             logs.update(compare_distributions(
-                self.sampler.prior_model.target_dist['log_r'].detach().cpu(),
+                sampler.prior_model.target_dist['log_r'].detach().cpu(),
                 running_dist.detach().cpu())
             )
             logs.update(plot_relative_distance_distributions(
                 xyz=rwd_logs['x'],
                 n_plots=4,  # Show 4 comparison columns
-                target_dist=self.sampler.prior_model.target_dist['x']
+                target_dist=sampler.prior_model.target_dist['x']
             ))
 
         return logs
@@ -423,7 +440,7 @@ class FinetuneRTBTrainer(RTBTrainer, FinetunePlotter):
 
     def generate_plots(self, *args, **kwargs):
         # Call the generate_plots method from InversePlotter
-        return FinetunePlotter.generate_plots(self, *args, **kwargs)
+        return FinetunePlotter.generate_plots(*args, **kwargs)
 
 
 class RTBBatchedTrainer(RTBTrainer):
@@ -486,4 +503,237 @@ class FinetuneRTBBatchedTrainer(RTBBatchedTrainer, FinetunePlotter):
     def generate_plots(self, *args, **kwargs):
         # Call the generate_plots method from InversePlotter
         return FinetunePlotter.generate_plots(self, *args, **kwargs)
+
+
+# trainer class
+class TrainingConfig:
+    def __init__(self, args):
+        self.train_batch_size = args.batch_size
+        self.eval_batch_size = args.plot_batch_size  # how many images to sample during evaluation
+        self.num_epochs = args.epochs
+        self.gradient_accumulation_steps = args.accumulate_gradient_every
+        self.learning_rate = args.learning_rate
+        self.test_sample_size = args.test_sample_size
+        self.lr_warmup_steps = 500
+        self.save_image_epochs = 300
+        self.save_model_epochs = 200
+        self.method = args.method
+        self.data_path = args.data_path
+        self.mixed_precision = "fp16" if args.mixed_precision else 'no'  # `no` for float32, `fp16` for automatic mixed precision
+        self.output_dir = args.save_folder  # the model name locally and on the HF Hub
+        self.inference_steps = args.sampling_length
+        self.variance_type = 'fixed_large'  # 'fixed_large'
+        self.push_to_wandb = args.push_to_wandb
+        self.notes = args.notes
+        self.snr_training = args.snr_training
+        self.snr_gamma = args.snr_gamma
+
+        self.push_to_hf = args.push_to_hf  # whether to upload the saved model to the HF Hub
+        self.exp_name = args.exp_name  # the name of the repository to create on the HF Hub
+        self.hub_private_repo = True
+        self.overwrite_output_dir = True  # overwrite the old model when re-running the notebook
+        self.seed = args.seed
+        self.device = args.device
+
+
+def evaluate(batch_size, epoch, pipeline, folder, inference_steps=50, seed=123):
+    # Sample some images from random noise (this is the backward diffusion process).
+    # The default pipeline output type is `List[PIL.Image]`
+    images = pipeline(
+        batch_size=batch_size,
+        generator=torch.manual_seed(seed),
+        num_inference_steps=inference_steps,
+    ).images
+
+    image_grid = make_image_grid(images, rows=5, cols=6)
+
+    # Save the images
+    test_dir = os.path.join(folder, "samples")
+    os.makedirs(test_dir, exist_ok=True)
+    filename = f"{test_dir}/{epoch:04d}.png"
+    image_grid.save(filename)
+    return filename
+
+
+class DiffuserTrainer():
+
+    def __init__(self, config, model, sampler, source_sampler, scheduler, optimizer, lr_scheduler, reward_function):
+        self.config = config
+        self.model = model
+        self.sampler = sampler
+        self.noise_scheduler = scheduler
+        self.source_sampler = source_sampler
+        self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
+        self.reward_function = reward_function
+
+        self.accelerator = Accelerator(
+            mixed_precision=self.config.mixed_precision,
+            gradient_accumulation_steps=self.config.gradient_accumulation_steps,
+            log_with="tensorboard",
+            project_dir=os.path.join(self.config.output_dir, "logs"),
+            cpu=self.config.device == 'cpu'
+        )
+        if self.accelerator.is_main_process:
+            if self.config.output_dir is not None:
+                os.makedirs(self.config.output_dir, exist_ok=True)
+            if self.config.push_to_hf:
+                hf_token = os.getenv('HF_TOKEN', None)
+                if hf_token is None:
+                    print("No HuggingFace token was set in 'HF_TOKEN' env. variable. Setting push_to_hf to false.")
+                    self.config.push_to_hf = False
+                else:
+                    print("HF login succesfull!")
+                    wandb.login(token=hf_token)
+
+                    self.hub_model_id = f"{hb.whoami()['name']}/{self.config.exp_name}"
+                    self.repo_id = create_repo(
+                        repo_id=self.hub_model_id or Path(self.config.output_dir).name, exist_ok=True
+                    ).repo_id
+
+            exp_name = "_".join(self.config.exp_name.split("_")[:-1]).split('-')[0] if '_' in self.config.exp_name else self.config.exp_name
+
+            wandb.init(
+                project="_".join(exp_name.split('_')[:2]),
+                dir=self.config.output_dir,
+                resume=True,
+                mode='online' if self.config.push_to_wandb else "offline",
+                config={k: str(val) if isinstance(val, (list, tuple)) else val for k, val in self.config.__dict__.items()},
+                name=self.config.exp_name
+            )
+            self.checkpoint_dir = f"{self.config.output_dir}checkpoints/"
+            self.checkpoint_file = self.checkpoint_dir + "checkpoint.tar"
+            folder_create(self.checkpoint_dir, exist_ok=True)
+
+    def train(self):
+        # Initialize accelerator and tensorboard logging
+
+        it = 0
+        if wandb.run.resumed and file_exists(self.checkpoint_file):
+            checkpoint = torch.load(self.checkpoint_file)
+            self.sampler.load(self.checkpoint_dir)
+            pipeline = self.sampler.posterior_node.policy
+
+            self.model = pipeline.unet
+            self.model.train()
+            self.noise_scheduler = pipeline.scheduler
+
+            self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.config.learning_rate)
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.last_epoch = checkpoint["scheduler_last_epoch"]
+            it = checkpoint["it"]
+            print(f"***** RESUMING PREVIOUS RUN AT IT={it}")
+
+        # Prepare everything
+        # There is no specific order to remember, you just need to unpack the
+        # objects in the same order you gave them to the prepare method.
+        accel_set = self.model, self.optimizer
+        if self.lr_scheduler is not None:
+            accel_set = accel_set + (self.lr_scheduler,)
+        optim_set = self.accelerator.prepare(accel_set)
+        if len(optim_set) == 2:
+            model, optimizer = optim_set
+            lr_scheduler = None
+        else:
+            model, optimizer, lr_scheduler = optim_set
+
+        # train the model
+        progress_bar = tqdm(total=self.config.num_epochs, disable=not self.accelerator.is_local_main_process)
+        progress_bar.set_description(f"Iteration: {it}")
+
+        self.cond_args = self.sampler.prior_model.get_cond_args(device=self.config.device)
+
+        while it < self.config.num_epochs:
+
+            clean_images = self.source_sampler.sample()
+            # Sample noise to add to the images
+            noise = torch.randn(clean_images.shape, device=clean_images.device)
+            bs = clean_images.shape[0]
+
+            # Sample a random timestep for each image
+            timesteps = torch.randint(
+                0, self.noise_scheduler.config.num_train_timesteps, (bs,), device=clean_images.device,
+                dtype=torch.int64
+            )
+
+            # Add noise to the clean images according to the noise magnitude at each timestep
+            # (this is the forward diffusion process)
+            noisy_images = self.noise_scheduler.add_noise(clean_images, noise, timesteps)
+
+            with self.accelerator.accumulate(model):
+                # Predict the noise residual
+                noise_pred = model(noisy_images, timesteps, **self.cond_args)[0]
+
+                if self.config.snr_training:
+                    snr = compute_snr(self.noise_scheduler, timesteps)
+                    mse_loss_weights = torch.stack([snr, self.config.snr_gamma * torch.ones_like(timesteps)], dim=1).min(
+                        dim=1
+                    )[0]
+                    if self.noise_scheduler.config.prediction_type == "epsilon":
+                        mse_loss_weights = mse_loss_weights / snr
+                    elif self.noise_scheduler.config.prediction_type == "v_prediction":
+                        mse_loss_weights = mse_loss_weights / (snr + 1)
+
+                    loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="none")
+                    loss = loss.mean(dim=list(range(1, len(loss.shape)))) * mse_loss_weights
+                    loss = loss.mean()
+                else:
+                    loss = F.mse_loss(noise_pred, noise)
+
+                self.accelerator.backward(loss)
+
+                self.accelerator.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
+
+                if lr_scheduler is not None:
+                    lr_scheduler.step()
+                optimizer.zero_grad()
+
+            progress_bar.update(1)
+            logs = {"loss": loss.detach().item(),
+                    "step": it}
+            if lr_scheduler is not None:
+                logs["lr"] = lr_scheduler.get_last_lr()[0]
+
+            progress_bar.set_postfix(**logs)
+
+            if self.accelerator.is_main_process:
+
+                with torch.no_grad():
+
+                    # After each epoch you optionally sample some demo images with evaluate() and save the model
+                    if (it % self.config.save_image_epochs == 0 or it == self.config.num_epochs - 1):
+
+                        logs.update(FinetunePlotter.generate_plots(
+                            prior_model=self.sampler.prior_model,
+                            reward_function=self.reward_function,
+                            sampler=self.sampler,
+                            config=self.config,
+                            cond_args=self.cond_args
+                        ))
+
+                    wandb.log(logs, step=it)  # log results in wandb
+
+                    # After each epoch you optionally sample some demo images with evaluate() and save the model
+                    if (it % self.config.save_model_epochs == 0 or it == self.config.num_epochs - 1):
+                        self.sampler.save(
+                            self.checkpoint_dir,
+                            self.config.push_to_hf,
+                            self.optimizer,
+                            it=it,
+                            logZ=0.,
+                            scheduler_last_epoch=lr_scheduler.last_epoch if lr_scheduler is not None else 0
+
+                        )
+
+            it += 1
+
+        if self.config.push_to_hf:
+            upload_folder(
+                repo_id=self.repo_id,
+                folder_path=self.checkpoint_dir,
+                commit_message=f"Iteration {it}",
+                ignore_patterns=["step_*", "epoch_*", "wandb*"],
+            )
 

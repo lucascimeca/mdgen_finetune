@@ -43,7 +43,7 @@ unset CUDA_VISIBLE_DEVICES
 #                               --data_path ~/scratch/mdgen/data/ --splits_path ../../splits/ \
 #                               --load_path ../../pretrained/ --tb True --learning_rate 5e-5  --inference vpsde \
 #                               --beta_start $1 --loss_batch_size 32 --replay_buffer_prob .2 \
-#                               --load_outsourced_path ../../pretrained/mdgen_source_sampler.pth \
+#                               --load_outsourced_path ../../pretrained/mdgen_source_sampler_old.pth \
 #                               --clip 0.05 --replay_buffer uniform --wandb_track True
 
 python ../outsourced_train_posterior.py --epochs 5000 --traj_length 100 --sampling_length 20 --batch_size 32 \

@@ -12,7 +12,7 @@ from diffusers.models.unets.unet_2d import UNet2DOutput
 from huggingface_hub import create_repo, upload_folder, login
 
 from functools import partial
-from rtb_utils.pytorch_utils import NoContext, print_gpu_memory, create_batches, check_gradients
+from rtb_utils.pytorch_utils import NoContext, print_gpu_memory, create_batches, check_gradients, cycle
 from torch.cuda.amp import autocast
 
 import torch
@@ -239,7 +239,6 @@ class PosteriorPriorDGFN(nn.Module):
             config,
             ddim_sampling_eta=0.,
             mixed_precision=False,
-            dataloader=None,
             *args,
             **kwargs
     ):
@@ -280,7 +279,6 @@ class PosteriorPriorDGFN(nn.Module):
                                  x_dim=dim,
                                  clip=outsourced_posterior_policy.scheduler.config.clip_sample,
                                  sampling_step=self.sampling_step,
-                                 ddim=self.ddim,
                                  train=True)
 
         self.prior_model = prior_model
@@ -460,7 +458,7 @@ class PosteriorPriorDGFN(nn.Module):
                 # get posterior pf
                 return_dict['logpf_posterior'] += self.posterior_node.get_logpf(x=new_x)
 
-            _, pb_mean, pb_std = scheduler.step_noise(new_x, x_start, t_source=t, t_end=t_prev)
+            pb_mean, _, pb_std = scheduler.step_noise(new_x, x_start, t_source=t, t_end=t_prev)
             return_dict['logpb'] += self.prior_node.get_logpf(x=x.detach(), mean=pb_mean.detach(), std=pb_std)
 
             if save_traj:
@@ -926,12 +924,13 @@ class PosteriorPriorDGFN(nn.Module):
     def sample(self, batch_size=16, sample_from_prior=False):
         return self.sample_fwd(batch_size=batch_size, sample_from_prior=sample_from_prior, x_start=None)['x'].clamp(-1, 1)
 
-    def save(self, folder, push_to_hf, opt, it=0, logZ=0.):
+    def save(self, folder, push_to_hf, opt, it=0, logZ=0., **kwargs):
 
         torch.save({
             "it": it,
             "optimizer_state_dict": opt.state_dict(),
             "logZ": logZ,
+            **kwargs,
         }, folder + "checkpoint.tar")
 
         if isinstance(self.posterior_node.policy.unet, nn.DataParallel):

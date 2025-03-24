@@ -221,3 +221,8 @@ class Logger:
         self.args = load_dict_from_file(f"{path}/run_args.json")
         self.logs = load_dict_from_file(f"{path}/run_logs.json")
 
+
+def cycle(dl):
+    while True:
+        for data in dl:
+            yield data

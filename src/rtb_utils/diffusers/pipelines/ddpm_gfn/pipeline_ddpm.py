@@ -17,6 +17,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 
+import diffusers
 from rtb_utils.diffusers.schedulers.scheduling_ddpm_gfn import DDPMGFNScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline, ImagePipelineOutput
@@ -51,8 +52,10 @@ class DDPMGFNPipeline(DiffusionPipeline):
         batch_size: int = 1,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         num_inference_steps: int = 1000,
-        output_type: Optional[str] = "pil",
+        output_type: Optional[str] = "tensor",
         return_dict: bool = True,
+        x_shape: Optional[Tuple[int]] = None,
+        condition: Optional[dict] = None,
     ) -> Union[ImagePipelineOutput, Tuple]:
         r"""
         The call function to the pipeline for generation.
@@ -92,15 +95,20 @@ class DDPMGFNPipeline(DiffusionPipeline):
                 returned where the first element is a list with the generated images
         """
         # Sample gaussian noise to begin loop
-        if isinstance(self.unet.config.sample_size, int):
-            image_shape = (
-                batch_size,
-                self.unet.config.in_channels,
-                self.unet.config.sample_size,
-                self.unet.config.sample_size,
-            )
+        assert isinstance(self.unet, diffusers.ModelMixin) or x_shape is not None, "Model must be a diffuser or a shape for x must be provided"
+
+        if isinstance(self.unet, diffusers.ModelMixin):
+            if isinstance(self.unet.config.sample_size, int):
+                image_shape = (
+                    batch_size,
+                    self.unet.config.in_channels,
+                    self.unet.config.sample_size,
+                    self.unet.config.sample_size,
+                )
+            else:
+                image_shape = (batch_size, self.unet.config.in_channels, *self.unet.config.sample_size)
         else:
-            image_shape = (batch_size, self.unet.config.in_channels, *self.unet.config.sample_size)
+            image_shape = (batch_size, *x_shape)
 
         if self.device.type == "mps":
             # randn does not work reproducibly on mps
@@ -114,27 +122,19 @@ class DDPMGFNPipeline(DiffusionPipeline):
 
         for t in self.progress_bar(self.scheduler.timesteps):
             # 1. predict noise model_output
-            model_output = self.unet(image, t).sample
+
+            if condition is not None:
+                model_output = self.unet(image, t, **condition)
+            else:
+                model_output = self.unet(image, t)
 
             # 2. compute previous image: x_t -> x_t-1
             image = self.scheduler.step(model_output, t, image, generator=generator).prev_sample
 
-        image = (image / 2 + 0.5).clamp(0, 1)
-        image = image.cpu().permute(0, 2, 3, 1).numpy()
-        if output_type == "pil":
-            image = self.numpy_to_pil(image)
-
-        if not return_dict:
-            return (image,)
-
-        return ImagePipelineOutput(images=image)
+        return image
 
     def sample(self, *args, **kwargs):
-        res = self(*args, output_type='tensor', **kwargs)[0]
-        if isinstance(res, ImagePipelineOutput):
-            return res.images
-        else:
-            return res
+        return self(*args, output_type='tensor', **kwargs)[0]
 
     def eval(self):
         self.unet.eval()

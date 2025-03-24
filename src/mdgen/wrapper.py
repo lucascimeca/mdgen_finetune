@@ -413,7 +413,7 @@ class NewMDGenWrapper(Wrapper):
             B, T, L, _ = latents.shape
         return B, T, L, self.latent_dim
 
-    def sample_prior_latent(self, B, T, L, device):
+    def sample_prior_latent(self, B, T, L, device='cpu'):
         if self.args.design:
             zs_continuous = torch.randn(B, T, L, self.latent_dim - 20, device==device)
             zs_discrete = torch.distributions.Dirichlet(torch.ones(B, L, 20, device=device)).sample()

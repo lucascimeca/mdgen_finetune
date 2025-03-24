@@ -52,13 +52,16 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     parser.add_argument('-bs', '--batch_size', type=int, default=32, help="Training Batch Size.")
     parser.add_argument('-tbs', '--test_sample_size', default=300, type=int, help='Test batchsize.')
 
-    parser.add_argument('--learning_rate', default=1e-3, type=float, help='Initial learning rate.')
+    parser.add_argument('-lr', '--learning_rate', default=1e-3, type=float, help='Initial learning rate.')
     parser.add_argument('--lr_logZ', default=1e-1, type=float, help='Learning rate for logZ.')
     parser.add_argument('--z_weight_decay', default=0, type=float, help='Weight decay for logZ.')
     parser.add_argument('--vargrad', default=False, type=strtobool, help='Whether to use vargrad.')
     parser.add_argument('--vargrad_sample_n0', default=4, type=int, help='How many samples to use for vargrad.')
     parser.add_argument('--energy_temperature', default=1., type=float, help='temperature of energy function.')
     parser.add_argument('--conditional', default=False, type=strtobool, help='This will run the conditional version of the models. Use only in conjuction with inverse_conditional_finetune.py at the moment.')
+
+    parser.add_argument('--snr_training', default=True, type=strtobool, help='Whether to use snr scaling loss for prior training.')
+    parser.add_argument('--snr_gamma', default=5., type=float, help='Clipping value for snr loss.')
 
     parser.add_argument('--peptide', type=str, default='FLRH', help='Peptide to use.')
 

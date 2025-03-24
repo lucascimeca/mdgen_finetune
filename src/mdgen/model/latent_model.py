@@ -127,6 +127,10 @@ class LatentMDGenModel(nn.Module):
 
         self.initialize_weights()
 
+    @property
+    def device(self) -> torch.device:
+        return next(self.parameters()).device
+
     def initialize_weights(self):
         # Initialize transformer layers:
         def _basic_init(module):

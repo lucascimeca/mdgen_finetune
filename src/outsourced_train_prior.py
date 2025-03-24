@@ -16,22 +16,6 @@ from distutils.util import strtobool
 from rtb_utils import protein_rtb
 from rtb_utils.replay_buffer import ReplayBuffer
 
-def cleanup():
-    if hasattr(rtb_model, 'tmp_dir') and os.path.exists(rtb_model.tmp_dir):
-        print(f"Cleaning up temporary directory: {rtb_model.tmp_dir}")
-        shutil.rmtree(rtb_model.tmp_dir)
-
-# Register cleanup function for normal exit
-atexit.register(cleanup)
-
-# Register cleanup function for termination signals
-def signal_handler(sig, frame):
-    cleanup()
-    sys.exit(1)
-
-signal.signal(signal.SIGINT, signal_handler)  # Handle Ctrl+C
-signal.signal(signal.SIGTERM, signal_handler)  # Handle termination
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"running experiments on '{device}'")
 parser = argparse.ArgumentParser()
@@ -137,24 +121,44 @@ rtb_model = protein_rtb.ProteinRTBModel(
     config=args
 )
 
+
+def cleanup():
+    if hasattr(rtb_model, 'tmp_dir') and os.path.exists(rtb_model.tmp_dir):
+        print(f"Cleaning up temporary directory: {rtb_model.tmp_dir}")
+        shutil.rmtree(rtb_model.tmp_dir)
+
+# Register cleanup function for normal exit
+atexit.register(cleanup)
+
+# Register cleanup function for termination signals
+def signal_handler(sig, frame):
+    cleanup()
+    sys.exit(1)
+
+signal.signal(signal.SIGINT, signal_handler)  # Handle Ctrl+C
+signal.signal(signal.SIGTERM, signal_handler)  # Handle termination
+
+
+
 try:
     # Main execution (training, inference, etc.)
-    rtb_model.finetune(
-        shape=(args.batch_size, *in_shape),
-        n_iters=args.n_iters,
-        learning_rate=args.lr,
-        clip=args.clip,
-        prior_sample_prob=args.prior_sample_prob,
-        replay_buffer_prob=args.replay_buffer_prob,
-        anneal=args.anneal,
-        anneal_steps=args.anneal_steps
-    )
-
-    # rtb_model.denoising_score_matching_unif(
-    #     n_iters=10000,
-    #     learning_rate=5e-5,
-    #     clip=0.1
+    # rtb_model.finetune(
+    #     shape=(args.batch_size, *in_shape),
+    #     n_iters=args.n_iters,
+    #     learning_rate=args.lr,
+    #     clip=args.clip,
+    #     prior_sample_prob=args.prior_sample_prob,
+    #     replay_buffer_prob=args.replay_buffer_prob,
+    #     anneal=args.anneal,
+    #     anneal_steps=args.anneal_steps
     # )
+
+    rtb_model.denoising_score_matching_unif(
+        shape=(args.batch_size, *in_shape),
+        n_iters=10000,
+        learning_rate=5e-5,
+        clip=0.1
+    )
 finally:
     cleanup()
 
