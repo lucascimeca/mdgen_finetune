@@ -5,7 +5,7 @@
 # passing in the different beta_start values you want.
 
 # If you need 5 distinct values of beta_start, define them here:
-beta_values=(1e6 1.0)
+beta_values=('rtb' 'tb')
 
 for beta in "${beta_values[@]}"; do
   echo "Submitting job with beta_start=${beta}"
