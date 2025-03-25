@@ -485,8 +485,6 @@ class PosteriorPriorDGFN(nn.Module):
         assert x is not None, "provide starting samples for backward steps"
         sampling_length = sampling_length if sampling_length is not None else self.sampling_length
 
-        sampling_length = sampling_length if sampling_length is not None else self.sampling_length
-
         self.posterior_node.policy.scheduler.set_timesteps(sampling_length)
         self.prior_node.policy.scheduler.set_timesteps(sampling_length)
         scheduler = copy.deepcopy(self.posterior_node.policy.scheduler)
@@ -509,17 +507,18 @@ class PosteriorPriorDGFN(nn.Module):
         return_dict['x'] = x_start
         times_to_detach = np.random.choice([t for t in sampling_times], int(sampling_length * detach_freq), replace=False)
 
+        # step_xs = [x]
+        # step_xs = [scheduler.step_noise(step_xs[-1], b_noise, t=scheduler.next_timestep(t) if scheduler.next_timestep(t) < self.traj_length else scheduler.next_timestep(t) - 1)[0] for t in backward_sampling_times][1:]
+        # xs = [scheduler.add_noise(x, b_noise, t) for t in backward_sampling_times]
+
         for i, t in tqdm(enumerate(backward_sampling_times), total=len(backward_sampling_times)):
 
-            t_next = t + self.traj_length // self.sampling_length
-            if t_next == self.traj_length:
-                t_next -= 1
+            t_next = scheduler.next_timestep(t)
 
             b_noise = torch.randn_like(x)
-            new_x, _, _ = scheduler.step_noise(x, b_noise, t=t)
+            new_x, std = scheduler.add_noise(x_start, b_noise, t=t, return_std=True)
 
-            return_dict['logpb'] += self.posterior_node.get_logpf(x=new_x.detach(), mean=new_x)
-            # x = self.policy.scheduler.add_noise(x_0, self.noise, t_next)
+            return_dict['logpb'] += self.posterior_node.get_logpf(x=new_x, mean=x, std=std)
 
             t_specific_args = {
                 'noise': None if t > 0 else 0.,  # fix noise for backward process

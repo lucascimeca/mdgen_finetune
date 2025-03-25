@@ -549,7 +549,8 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
         original_samples: torch.FloatTensor,
         noise: torch.FloatTensor,
         timesteps: torch.IntTensor,
-    ) -> torch.FloatTensor:
+        return_std: bool = False,
+    ) -> torch.FloatTensor or Tuple[torch.FloatTensor, torch.FloatTensor]:
         # Make sure alphas_cumprod and timestep have same device and dtype as original_samples
         # Move the self.alphas_cumprod to device to avoid redundant CPU to GPU data movement
         # for the subsequent add_noise calls
@@ -568,6 +569,19 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
             sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
 
         noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
+
+        if return_std:
+            # std of the backward policy
+            t = self.next_timestep(timesteps)
+            if self.variance_type == "fixed_small_log":
+                variance = self._get_variance(t)
+            elif self.variance_type == "learned_range":
+                variance = self._get_variance(t)
+            else:
+                variance = (self._get_variance(t) ** 0.5)
+
+            return noisy_samples, variance
+
         return noisy_samples
 
     def step_noise(
@@ -675,5 +689,21 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
                 self.num_inference_steps if self.num_inference_steps else self.config.num_train_timesteps
             )
             prev_t = timestep - self.config.num_train_timesteps // num_inference_steps
+
+        return prev_t
+
+    def next_timestep(self, timestep):
+        if self.custom_timesteps:
+            index = (self.timesteps == timestep).nonzero(as_tuple=True)[0][0]
+            if index == 0:
+                prev_t = self.timesteps[0]
+            else:
+                prev_t = self.timesteps[index - 1]
+        else:
+            num_inference_steps = self.num_inference_steps if self.num_inference_steps else self.config.num_train_timesteps
+            prev_t = timestep + self.config.num_train_timesteps // num_inference_steps
+
+            if prev_t >= self.config.num_train_timesteps:
+                prev_t = -1
 
         return prev_t

@@ -80,6 +80,8 @@ def plot_relative_distance_distributions(xyz, n_plots, target_dist, sample_size=
     xyz_np = xyz.reshape(-1, 3)
     target_np = target_dist.reshape(-1, 3)
 
+    sample_size = min(len(xyz), sample_size)
+
     fig, axes = plt.subplots(3, n_plots, figsize=(4 * n_plots, 10))
     plt.subplots_adjust(wspace=0.3, hspace=0.5)
 

@@ -92,10 +92,13 @@ class Amber14Reward(nn.Module):
         print("computing energies")
         for i in tqdm(range(len(traj.xyz)), total=len(traj.xyz)):
 
+            print("modeler")
             modeller = Modeller(pdb.topology, traj.xyz[i])
 
+            print("Hydrogens")
             modeller.addHydrogens(self.forcefield, pH=7)
 
+            print("forcefield")
             # Build the system (using implicit or explicit solvent as needed).
             if self.implicit:
                 system = self.forcefield.createSystem(modeller.topology, constraints=HBonds)
@@ -108,6 +111,7 @@ class Amber14Reward(nn.Module):
                     constraints=HBonds
                 )
 
+            print("simulation")
             # Create the integrator and simulation.
             dt = 2 * femtosecond
             integrator = LangevinMiddleIntegrator(350 * kelvin, self.friction_coeff / picosecond, dt)
@@ -116,12 +120,15 @@ class Amber14Reward(nn.Module):
             # Set the initial positions from the template (or modeller) – will be overwritten.
             simulation.context.setPositions(modeller.positions)
 
+            print("force")
             # If using explicit solvent, add a barostat (and reinitialize if needed).
             if not self.implicit:
                 system.addForce(MonteCarloBarostat(1 * bar, 350 * kelvin))
                 simulation.context.reinitialize(preserveState=True)
 
+            print("get state")
             state = simulation.context.getState(getEnergy=True)
+            print("get energy")
             energy = state.getPotentialEnergy()
             energies.append(energy._value)
 
