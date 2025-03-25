@@ -408,8 +408,10 @@ class PosteriorPriorDGFN(nn.Module):
         return_dict['logpf_prior'] = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
         return_dict['logpb'] = 0 * normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
 
+        self.posterior_node.policy.scheduler.set_timesteps(sampling_length)
+        self.prior_node.policy.scheduler.set_timesteps(sampling_length)
         scheduler = copy.deepcopy(self.posterior_node.policy.scheduler)
-        scheduler.set_timesteps(sampling_length)
+
         sampling_times = scheduler.timesteps
 
         times_to_detach = np.random.choice([t.item() for t in sampling_times], int(sampling_length * detach_freq), replace=False).tolist()

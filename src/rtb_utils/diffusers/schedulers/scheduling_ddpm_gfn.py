@@ -184,6 +184,7 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
     def __init__(
         self,
         num_train_timesteps: int = 1000,
+        num_inference_steps: int = 1000,
         beta_start: float = 0.0001,
         beta_end: float = 0.02,
         beta_schedule: str = "linear",
@@ -232,7 +233,7 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
 
         # setable values
         self.custom_timesteps = False
-        self.num_inference_steps = None
+        self.num_inference_steps = num_inference_steps
         self.timesteps = torch.from_numpy(np.arange(0, num_train_timesteps)[::-1].copy())
 
         self.variance_type = variance_type
