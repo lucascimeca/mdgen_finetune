@@ -342,7 +342,7 @@ class RTBTrainer(Trainer):
             self.sampler.logZ = torch.nn.Parameter(torch.tensor(checkpoint["logZ"]).to(self.sampler.device))
             params = [param for param in self.sampler.posterior_node.get_unet_parameters() if param.requires_grad]
             self.opt = type(self.opt.optimizer)([{'params': params,
-                                                  'lr': self.config.lr},
+                                                  'lr': self.config.learning_rate},
                                                  {'params': [self.sampler.logZ],
                                                   'lr': self.config.lr_logZ,
                                                   'weight_decay': self.config.z_weight_decay}])

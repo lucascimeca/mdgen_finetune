@@ -53,7 +53,8 @@ class TimestepEmbedder(nn.Module):
         t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
         t_emb = self.mlp(t_freq)
         return t_emb
-        
+
+
 class FinalLayer(nn.Module):
     """
     The final layer of DiT.
