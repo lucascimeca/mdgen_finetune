@@ -421,7 +421,6 @@ class PosteriorPriorDGFN(nn.Module):
         if save_traj:
             traj = [x.clone()]
 
-        t_prev = torch.LongTensor([self.traj_length])[0] - 1
         for i, t in tqdm(enumerate(sampling_times), total=len(sampling_times)):
 
             t_specific_args = {
@@ -445,9 +444,6 @@ class PosteriorPriorDGFN(nn.Module):
                 step_args['noise'] = self.prior_node.noise if t > 0. else 0.  # adjust noise to match prior
                 step_args['condition'] = condition
                 step_args['prior_mean'] = self.prior_node.posterior_mean
-                step_args['use_dps'] = True  # enables DPS drift but the node will only use it if config.use_dps_drift is true
-                step_args['dps_drift'] = self.prior_node.dps_drift  # uncomment to use dps drift wrt prior weights
-                self.prior_node.dps_drift = None  # reset
 
                 # # -- make a step in x by posterior model -- (updates internal values of mean and std for posterior node)
                 posterior_new_x = self.posterior_node(x, t, **step_args)
@@ -460,8 +456,8 @@ class PosteriorPriorDGFN(nn.Module):
                 # get posterior pf
                 return_dict['logpf_posterior'] += self.posterior_node.get_logpf(x=new_x)
 
-            pb_mean, _, pb_std = scheduler.step_noise(new_x, x_start, t_source=t, t_end=t_prev)
-            return_dict['logpb'] += self.prior_node.get_logpf(x=x.detach(), mean=pb_mean.detach(), std=pb_std)
+            pb_mean, _, _ = scheduler.step_noise(new_x, x_start, t=t)
+            return_dict['logpb'] += self.posterior_node.get_logpf(x=x.detach(), mean=pb_mean.detach())
 
             if save_traj:
                 traj.append(new_x.clone())
@@ -491,8 +487,10 @@ class PosteriorPriorDGFN(nn.Module):
         sampling_length = sampling_length if sampling_length is not None else self.sampling_length
 
         sampling_length = sampling_length if sampling_length is not None else self.sampling_length
+
+        self.posterior_node.policy.scheduler.set_timesteps(sampling_length)
+        self.prior_node.policy.scheduler.set_timesteps(sampling_length)
         scheduler = copy.deepcopy(self.posterior_node.policy.scheduler)
-        scheduler.set_timesteps(sampling_length)
         sampling_times = scheduler.timesteps
 
         return_dict = {}
@@ -519,9 +517,9 @@ class PosteriorPriorDGFN(nn.Module):
                 t_next -= 1
 
             b_noise = torch.randn_like(x)
-            new_x, mean, std = scheduler.step_noise(x, b_noise, t_source=t, t_end=t_next)
+            new_x, _, _ = scheduler.step_noise(x, b_noise, t=t)
 
-            return_dict['logpb'] += self.prior_node.get_logpf(x=new_x.detach(), mean=mean, std=std)
+            return_dict['logpb'] += self.posterior_node.get_logpf(x=new_x.detach(), mean=new_x)
             # x = self.policy.scheduler.add_noise(x_0, self.noise, t_next)
 
             t_specific_args = {
@@ -576,8 +574,9 @@ class PosteriorPriorDGFN(nn.Module):
         normal_dist = torch.distributions.Normal(torch.zeros((len(x),) + tuple(self.dim), device=self.device),
                                                  torch.ones((len(x),) + tuple(self.dim), device=self.device))
 
+        self.posterior_node.policy.scheduler.set_timesteps(sampling_length)
+        self.prior_node.policy.scheduler.set_timesteps(sampling_length)
         scheduler = copy.deepcopy(self.posterior_node.policy.scheduler)
-        scheduler.set_timesteps(sampling_length)
         sampling_times = scheduler.timesteps
 
         return_dict = {}
@@ -669,8 +668,9 @@ class PosteriorPriorDGFN(nn.Module):
         sampling_length = len(traj)-1
         x1 = traj[0]  # starting noise
 
+        self.posterior_node.policy.scheduler.set_timesteps(sampling_length)
+        self.prior_node.policy.scheduler.set_timesteps(sampling_length)
         scheduler = copy.deepcopy(self.posterior_node.policy.scheduler)
-        scheduler.set_timesteps(sampling_length)
         sampling_times = scheduler.timesteps
 
         times_to_detach = np.random.choice([t.item() for t in sampling_times], int(sampling_length * detach_freq), replace=False).tolist()

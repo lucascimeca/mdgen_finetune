@@ -574,8 +574,7 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
             self,
             x: torch.FloatTensor,
             noise: torch.FloatTensor,
-            t_source: int,
-            t_end: int,
+            t: int,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """
         Deterministically moves a sample x from time t_source to t_end along the
@@ -611,6 +610,10 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
                 - noise_coeff: The effective coefficient applied to noise (i.e. the step's standard deviation).
         """
         # Ensure alphas_cumprod is on the proper device and type.
+
+        t_end = t  # where we're coming from (more noisy)
+        t_source = self.previous_timestep(t)  # where we've stepped into (more clean)
+
         self.alphas_cumprod = self.alphas_cumprod.to(device=x.device)
         alphas_cumprod = self.alphas_cumprod.to(dtype=x.dtype)
 
