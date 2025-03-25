@@ -463,7 +463,6 @@ class PosteriorPriorDGFN(nn.Module):
                 traj.append(new_x.clone())
 
             x = new_x.detach().clone()
-            t_prev = t.clone()
 
         return_dict['x'] = x
 
