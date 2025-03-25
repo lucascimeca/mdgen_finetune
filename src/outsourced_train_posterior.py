@@ -30,7 +30,7 @@ logtwopi = np.log(2 * 3.14159265358979)
 
 seed_experiment(args.seed)
 
-reward_model = Amber14Reward(device=args.device, energy_temperature=args.energy_temperature)
+reward_model = Amber14Reward(device=args.device, energy_temperature=args.energy_temperature, implicit=True)
 r_str = "ss_div_seed_" + str(args.seed)
 reward_args = []
 prior_model = MDGenSimulator(

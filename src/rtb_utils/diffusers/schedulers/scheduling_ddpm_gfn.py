@@ -699,10 +699,12 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
             else:
                 prev_t = self.timesteps[index - 1]
         else:
-            num_inference_steps = self.num_inference_steps if self.num_inference_steps else self.config.num_train_timesteps
+            num_inference_steps = (
+                self.num_inference_steps if self.num_inference_steps else self.config.num_train_timesteps
+            )
             prev_t = timestep + self.config.num_train_timesteps // num_inference_steps
 
             if prev_t >= self.config.num_train_timesteps:
-                prev_t = -1
+                prev_t = torch.tensor(self.config.num_train_timesteps - 1)
 
         return prev_t
