@@ -90,6 +90,7 @@ class Amber14Reward(nn.Module):
         # Depending on how your topology is ordered, you might need to reshape or re-order the positions.
         # Here, we assume that the full set of positions for the protein is a flattened (T*L, 3) array.
         print("computing energies")
+        print(len(traj.xyz))
         for i in tqdm(range(len(traj.xyz)), total=len(traj.xyz)):
 
             print("modeler")

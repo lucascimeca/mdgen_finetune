@@ -516,7 +516,7 @@ class PosteriorPriorDGFN(nn.Module):
             t_next = scheduler.next_timestep(t)
 
             b_noise = torch.randn_like(x)
-            new_x, std = scheduler.add_noise(x_start, b_noise, t=t, return_std=True)
+            new_x, std = scheduler.add_noise(x_start, b_noise, timesteps=t_next, return_std=True)
 
             return_dict['logpb'] += self.posterior_node.get_logpf(x=new_x, mean=x, std=std)
 
