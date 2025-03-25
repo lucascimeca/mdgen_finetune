@@ -572,13 +572,12 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
 
         if return_std:
             # std of the backward policy
-            t = self.next_timestep(timesteps)
             if self.variance_type == "fixed_small_log":
-                variance = self._get_variance(t)
+                variance = self._get_variance(timesteps)
             elif self.variance_type == "learned_range":
-                variance = self._get_variance(t)
+                variance = self._get_variance(timesteps)
             else:
-                variance = (self._get_variance(t) ** 0.5)
+                variance = (self._get_variance(timesteps) ** 0.5)
 
             return noisy_samples, variance
 
