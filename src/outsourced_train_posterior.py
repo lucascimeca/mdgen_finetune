@@ -12,18 +12,13 @@ from rtb_utils.rewards import Amber14Reward
 
 import torch
 import numpy as np
-import random
-import argparse
-from distutils.util import strtobool
-
-from rtb_utils import protein_rtb
-from rtb_utils.replay_buffer import ReplayBuffer
 
 
 # get arguments for the run
 args, state = fetch_args(exp_prepend='train_posterior')
 print(f"Running experiment on '{args.device}'")
 
+print(args)
 # -------- OVERRIDE ARGUMENTS (if you have to) ------
 
 logtwopi = np.log(2 * 3.14159265358979)
