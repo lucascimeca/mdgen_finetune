@@ -84,10 +84,12 @@ def get_DDPM_diffuser_pipeline(args, prior_model, outsourced_sampler=None):
 
     noise_scheduler = DDPMGFNScheduler(
         num_train_timesteps=args.traj_length,
+        num_inference_steps=args.sampling_length,
         beta_end=0.02,
-        beta_schedule="linear",
+        beta_schedule="squaredcos_cap_v2",
         beta_start=0.0001,
-        clip_sample=False,
+        clip_sample=True,
+        clip_sample_range=1,
         variance_type='fixed_large'
     )
 
@@ -296,19 +298,21 @@ class FinetunePlotter: # self.sampler.prior_model, self.reward_function, self.sa
                 print("Done!")
 
             print("Generating energy distribution for current model iteration")
-            results_dict = sampler(batch_size=config.test_sample_size, x_shape=prior_model.dims[1:], condition=cond_args)
-            prior_model.sample(zs0=results_dict['x'])  # sample in place, forms pdbs on disk
+            results_dict = sampler(
+                batch_size=config.test_sample_size,
+                condition=cond_args
+            )
+            prior_model.sample(zs0=results_dict['x'].to(config.device).detach())  # sample in place, forms pdbs on disk
             rwd_logs = reward_function(
                 prior_model.peptide,
                 data_path=sampler.config.data_path,
                 tmp_dir=sampler.prior_model.out_dir
             )  # compute reward of whatever is in data_path, then cleans it up
-            running_dist = rwd_logs['log_r'].to(sampler.device)
 
             print("Distribution generated!")
             logs.update(compare_distributions(
                 sampler.prior_model.target_dist['log_r'].detach().cpu(),
-                running_dist.detach().cpu())
+                rwd_logs['log_r'].to(sampler.device).detach().cpu())
             )
             logs.update(plot_relative_distance_distributions(
                 xyz=rwd_logs['x'],
@@ -647,6 +651,7 @@ class DiffuserTrainer():
         while it < self.config.num_epochs:
 
             clean_images = self.source_sampler.sample()
+
             # Sample noise to add to the images
             noise = torch.randn(clean_images.shape, device=clean_images.device)
             bs = clean_images.shape[0]
@@ -724,7 +729,6 @@ class DiffuserTrainer():
                             it=it,
                             logZ=0.,
                             scheduler_last_epoch=lr_scheduler.last_epoch if lr_scheduler is not None else 0
-
                         )
 
             it += 1
