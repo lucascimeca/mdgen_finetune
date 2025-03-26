@@ -152,7 +152,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
         'replay_buffer',
         'load_outsourced_ckpt'
     ]
-    args.exp_name = f"{'_'.join([f'{k}_{args.__dict__[k]}' for k in exp_critical_args])}" + "zero_rw" # todo remove new
+    args.exp_name = f"{'_'.join([f'{k}_{args.__dict__[k]}' for k in exp_critical_args])}" + "variance_rw" # todo remove new
     if len(args.exp_name) == 0:
         args.exp_name = f"mdgen_finetune_{args.model}"
     args.exp_name = f"{exp_prepend}_{args.exp_name}"
