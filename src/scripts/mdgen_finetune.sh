@@ -50,7 +50,7 @@ python ../outsourced_train_posterior.py --epochs 5000 --traj_length 1000 --sampl
                                         --save_folder ~/scratch/mdgen/results/ --data_path ~/scratch/mdgen/data/ \
                                         --splits_path ../../splits/ --lora False --load_path ../../pretrained/ \
                                         --method $1 --learning_rate $2 --energy_temperature $3 \
-                                        --vargrad False --vargrad_sample_n0 4 --test_sample_size 50 \
+                                        --vargrad $4 --vargrad_sample_n0 4 --test_sample_size 50 \
                                         --load_outsourced_path ../../pretrained/mdgen_source_sampler.bin \
                                         --push_to_wandb True --resume False --load_outsourced_ckpt True \
-                                        --rb_ratio .2 -rb $4
+                                        --rb_ratio .2 -rb $5
