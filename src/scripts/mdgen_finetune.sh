@@ -49,8 +49,8 @@ unset CUDA_VISIBLE_DEVICES
 python ../outsourced_train_posterior.py --epochs 5000 --traj_length 1000 --sampling_length 100 --batch_size 16 \
                                         --save_folder ~/scratch/mdgen/results/ --data_path ~/scratch/mdgen/data/ \
                                         --splits_path ../../splits/ --lora False --load_path ../../pretrained/ \
-                                        --method tb --learning_rate 6e-4 --energy_temperature $1 \
+                                        --method $1 --learning_rate $2 --energy_temperature $3 \
                                         --vargrad False --vargrad_sample_n0 4 --test_sample_size 50 \
                                         --load_outsourced_path ../../pretrained/mdgen_source_sampler.bin \
                                         --push_to_wandb True --resume True --load_outsourced_ckpt True \
-                                        --rb_ratio .2 -rb False
+                                        --rb_ratio .2 -rb $4

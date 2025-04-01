@@ -1,13 +1,21 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# This script does NOT itself use SBATCH directives.
-# Instead, it calls 'sbatch' on your existing mdgen_finetune.sh,
-# passing in the different beta_start values you want.
+methods=('tb' 'rtb')
+betas=('1.' '1e6')
+replay_buffers=('True' 'False')
 
-# If you need 5 distinct values of beta_start, define them here:
-beta_values=(1e6 1e3 1. .1 .01)
+for method in "${methods[@]}"; do
+  # Set learning rate depending on the method
+  if [ "$method" == "rtb" ]; then
+    lr="6e-4"
+  else
+    lr="1e-5"
+  fi
 
-for beta in "${beta_values[@]}"; do
-  echo "Submitting job with beta_start=${beta}"
-  sbatch mdgen_finetune.sh "${beta}"
+  for beta in "${betas[@]}"; do
+    for replay_buffer in "${replay_buffers[@]}"; do
+      echo "Submitting job with method=$method, lr=$lr, beta=$beta, replay_buffer=$replay_buffer"
+      sbatch mdgen_finetune.sh "$method" "$lr" "$beta" "$replay_buffer"
+    done
+  done
 done
