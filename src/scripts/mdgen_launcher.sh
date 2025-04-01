@@ -2,7 +2,7 @@
 
 methods=('tb' 'rtb')
 betas=('1.' '1e6')
-replay_buffers=('False')
+replay_buffers=('True' 'False')
 
 for method in "${methods[@]}"; do
   # Set learning rate depending on the method
