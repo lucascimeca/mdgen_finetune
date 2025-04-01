@@ -388,10 +388,10 @@ class RTBTrainer(Trainer):
                     data_path=self.sampler.config.data_path,
                     tmp_dir=self.sampler.prior_model.out_dir
                 )  # compute reward of whatever is in data_path, then cleans it up
-                # logr_x_prime = rwd_logs['log_r'].to(self.sampler.device)
+                logr_x_prime = rwd_logs['log_r'].to(self.sampler.device)
                 # todo remove debug lines
                 # logr_x_prime = (- results_dict['x'] ** 2).view(results_dict['x'].shape[0], -1).mean(1)
-                logr_x_prime = results_dict['x'].var(0).mean().repeat(results_dict['x'].shape[0])
+                # logr_x_prime = results_dict['x'].var(0).mean().repeat(results_dict['x'].shape[0])
 
             self.running_dist = logr_x_prime
 

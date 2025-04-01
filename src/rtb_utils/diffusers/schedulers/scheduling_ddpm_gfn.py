@@ -568,7 +568,8 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
         while len(sqrt_one_minus_alpha_prod.shape) < len(original_samples.shape):
             sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
 
-        noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
+        x_mean = sqrt_alpha_prod * original_samples
+        noisy_samples = x_mean + sqrt_one_minus_alpha_prod * noise
 
         if return_std:
             # std of the backward policy
@@ -579,7 +580,7 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
             else:
                 variance = (self._get_variance(timesteps) ** 0.5)
 
-            return noisy_samples, variance
+            return noisy_samples, x_mean, variance
 
         return noisy_samples
 

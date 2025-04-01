@@ -176,12 +176,9 @@ class HGFNode(nn.Module):
             self,
             x,
             t,
-            t_next=None,
             ddim_eta=None,
             noise=None,
             target=None,
-            backward=False,
-            x_0=None,
             clip_output=False,
             condition=None,
             detach=False,
@@ -199,7 +196,7 @@ class HGFNode(nn.Module):
             eta=ddim_eta,
             use_clipped_model_output=clip_output,
             langevin_correction=langevin_correction,
-            noise=self.noise if backward else noise,
+            noise=noise,
             target=target,
         )
         self.posterior_mean = results.posterior_mean.to(self.device)
@@ -511,40 +508,34 @@ class PosteriorPriorDGFN(nn.Module):
         return_dict['x'] = x_start
         times_to_detach = np.random.choice([t for t in sampling_times], int(sampling_length * detach_freq), replace=False)
 
-        # step_xs = [x]
-        # step_xs = [scheduler.step_noise(step_xs[-1], b_noise, t=scheduler.next_timestep(t) if scheduler.next_timestep(t) < self.traj_length else scheduler.next_timestep(t) - 1)[0] for t in backward_sampling_times][1:]
-        # xs = [scheduler.add_noise(x, b_noise, t) for t in backward_sampling_times]
+        b_noise = torch.randn_like(x)
 
         for i, t in tqdm(enumerate(backward_sampling_times), total=len(backward_sampling_times)):
 
             t_next = scheduler.next_timestep(t)
 
-            b_noise = torch.randn_like(x)
-            new_x, std = scheduler.add_noise(x_start, b_noise, timesteps=t_next, return_std=True)
+            new_x, mean, std = scheduler.add_noise(x_start, b_noise, timesteps=t_next, return_std=True)
 
-            return_dict['logpb'] += self.posterior_node.get_logpf(x=new_x, mean=x, std=std)
+            return_dict['logpb'] += self.posterior_node.get_logpf(x=new_x, mean=mean, std=std)
 
             t_specific_args = {
-                'noise': None if t > 0 else 0.,  # fix noise for backward process
-                'condition_noise': None if t > 0. else 0.,
+                'noise': None if t > 0 else 0.,  # fix noise for backward process\
                 'condition': condition,
-                't_next': t_next if self.traj_length > t_next else torch.LongTensor([self.traj_length - 1])[0],
                 'detach': t.item() in times_to_detach,
-                'x_0': x_start,
-                'backward': True,  # flag backward for backward step
             }
 
             step_args = self.get_schedule_args()
             step_args.update(t_specific_args)
 
             # -- make a backward step in x, compute mean and var in place by posterior model --
-            self.posterior_node(new_x, t, **step_args).detach()
+            self.posterior_node(new_x, t, **step_args)
 
             # get posterior pf
             return_dict['logpf_posterior'] += maybe_detach(self.posterior_node.get_logpf(x=x.detach()), t, times_to_detach)
 
             # ------ compute prior pf for posterior step --------
             # update internal values of pfs and logvar for prior -- inplace
+            step_args['detach'] = True
             self.prior_node(new_x, t, **step_args)
 
             # get prior pf, given posterior move
@@ -559,7 +550,7 @@ class PosteriorPriorDGFN(nn.Module):
 
         return_dict['logpf_posterior'] += normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
         return_dict['logpf_prior'] += normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
-        return_dict['logpb'] += normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
+        # return_dict['logpb'] += normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
 
         return_dict['x'] = x
 
