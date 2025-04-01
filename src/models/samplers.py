@@ -435,6 +435,9 @@ class PosteriorPriorDGFN(nn.Module):
             # extra params
             step_args['condition'] = condition
 
+            # prior won't need gradients
+            step_args['detach'] = True
+
             # -- make step in x by prior model -- (updates internal values of mean and std for prior node)
             new_x = self.prior_node(x, t, **step_args).detach()
 
@@ -444,6 +447,7 @@ class PosteriorPriorDGFN(nn.Module):
                 step_args['noise'] = self.prior_node.noise if t > 0. else 0.  # adjust noise to match prior
                 step_args['condition'] = condition
                 step_args['prior_mean'] = self.prior_node.posterior_mean
+                step_args['detach'] = False
 
                 # # -- make a step in x by posterior model -- (updates internal values of mean and std for posterior node)
                 posterior_new_x = self.posterior_node(x, t, **step_args)
@@ -456,8 +460,8 @@ class PosteriorPriorDGFN(nn.Module):
                 # get posterior pf
                 return_dict['logpf_posterior'] += self.posterior_node.get_logpf(x=new_x)
 
-            pb_mean, _, _ = scheduler.step_noise(new_x, x_start, t=t)
-            return_dict['logpb'] += self.posterior_node.get_logpf(x=x.detach(), mean=pb_mean.detach())
+            pb_x, pb_mean, std = scheduler.step_noise(new_x, x_start, t=scheduler.next_timestep(t))
+            return_dict['logpb'] += self.posterior_node.get_logpf(x=x.detach(), mean=pb_mean.detach(), std=std)
 
             if save_traj:
                 traj.append(new_x.clone())

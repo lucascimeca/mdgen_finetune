@@ -588,6 +588,7 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
             x: torch.FloatTensor,
             noise: torch.FloatTensor,
             t: int,
+            scheduled_std: bool = True,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """
         Deterministically moves a sample x from time t_source to t_end along the
@@ -638,7 +639,8 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
         x_scale = (a_end / a_source) ** 0.5
 
         # Compute the effective noise coefficient for the transition.
-        std = (1 - a_end) ** 0.5 - x_scale * (1 - a_source) ** 0.5
+        # std = (1 - a_end) ** 0.5 - x_scale * (1 - a_source) ** 0.5
+        std = (1 - a_source) ** 0.5 * (x_scale + 1)
 
         # Broadcast scalars to the shape of x.
         while len(x_scale.shape) < len(x.shape):
@@ -648,7 +650,16 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
 
         # Deterministically compute the new state.
         mean = x_scale * x
-        x_noised = mean + std * noise
+        x_noised = mean - std * noise
+
+        if scheduled_std:
+            # std of the backward policy
+            if self.variance_type == "fixed_small_log":
+                std = self._get_variance(t_end)
+            elif self.variance_type == "learned_range":
+                std = self._get_variance(t_end)
+            else:
+                std = (self._get_variance(t_end) ** 0.5)
 
         return x_noised, mean, std
 
