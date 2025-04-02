@@ -82,17 +82,17 @@ def get_DDPM_diffuser_pipeline(args, prior_model, outsourced_sampler=None):
         )
         outsourced_posterior = get_peft_model(outsourced_posterior, unet_lora_config).to(args.device)
 
+
     noise_scheduler = DDPMGFNScheduler(
         num_train_timesteps=args.traj_length,
         num_inference_steps=args.sampling_length,
         beta_end=0.02,
-        beta_schedule="squaredcos_cap_v2",
         beta_start=0.0001,
+        beta_schedule="sigmoid",
         clip_sample=False,
         clip_sample_range=1,
         variance_type='fixed_large'
     )
-
     oursourced_posterior_pipeline = DDPMGFNPipeline(unet=outsourced_posterior, scheduler=noise_scheduler)
     oursourced_prior_pipeline = DDPMGFNPipeline(unet=outsourced_prior, scheduler=noise_scheduler)
 
