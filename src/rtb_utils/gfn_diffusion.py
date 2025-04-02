@@ -88,7 +88,7 @@ def get_DDPM_diffuser_pipeline(args, prior_model, outsourced_sampler=None):
         beta_end=0.02,
         beta_schedule="squaredcos_cap_v2",
         beta_start=0.0001,
-        clip_sample=True,
+        clip_sample=False,
         clip_sample_range=1,
         variance_type='fixed_large'
     )
