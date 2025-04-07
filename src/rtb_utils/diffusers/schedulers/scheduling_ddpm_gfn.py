@@ -570,9 +570,9 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
 
         # x_mean = sqrt_alpha_prod * original_samples
         # noisy_samples = x_mean + sqrt_one_minus_alpha_prod * noise
-        std = sqrt_alpha_prod * original_samples
+        x_drift = sqrt_alpha_prod * original_samples
         x_mean = sqrt_one_minus_alpha_prod * noise
-        noisy_samples = x_mean + std
+        noisy_samples = x_mean + x_drift
 
         if return_std:
             # std of the backward policy

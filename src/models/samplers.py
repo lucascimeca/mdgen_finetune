@@ -508,7 +508,6 @@ class PosteriorPriorDGFN(nn.Module):
         return_dict['x'] = x_start
         times_to_detach = np.random.choice([t for t in sampling_times], int(sampling_length * detach_freq), replace=False)
 
-
         for i, t in tqdm(enumerate(backward_sampling_times), total=len(backward_sampling_times)):
 
             t_next = scheduler.next_timestep(t)
