@@ -668,7 +668,7 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
             else:
                 std = (self._get_variance(t_end) ** 0.5)
 
-        return x_noised, bkw_mean, std
+        return x_noised, mean, std
 
     def get_velocity(
         self, sample: torch.FloatTensor, noise: torch.FloatTensor, timesteps: torch.IntTensor
