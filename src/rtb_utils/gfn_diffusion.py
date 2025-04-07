@@ -409,13 +409,13 @@ class RTBTrainer(Trainer):
                         while i < results_dict['x'].shape[0]:
                             estimates += [(- results_dict['logpf_posterior'][i:i+self.config.vargrad_sample_n0]
                                            + log_pf_prior_or_pb[i:i+self.config.vargrad_sample_n0]
-                                           + logr_x_prime[i:i+self.config.vargrad_sample_n0]).mean()] * self.config.vargrad_sample_n0
+                                           + logr_x_prime[i:i+self.config.vargrad_sample_n0]).mean().detach()] * self.config.vargrad_sample_n0
                             i += self.config.vargrad_sample_n0
                         self.sampler.logZ.data = torch.FloatTensor(estimates).to(self.config.device)
                     else:
-                        vargrad_logz = (- results_dict['logpf_posterior'] + log_pf_prior_or_pb + logr_x_prime).mean()
+                        vargrad_logzs = (- results_dict['logpf_posterior'] + log_pf_prior_or_pb + logr_x_prime).detach()
                         with torch.no_grad():
-                            self.sampler.logZ.data = vargrad_logz
+                            self.sampler.logZ.data = vargrad_logzs.mean()
 
                 # compute loss rtb for posterior
                 loss = 0.5 * (((results_dict['logpf_posterior'] + self.sampler.logZ - log_pf_prior_or_pb - logr_x_prime) ** 2)
@@ -424,6 +424,8 @@ class RTBTrainer(Trainer):
                 if x_0 is None:
                     self.replay_buffer.add(results_dict['x'].detach(), logr_x_prime.detach(), loss.clone().detach())
 
+                if self.config.vargrad:
+                    results_dict['vargrad_var'] = vargrad_logzs.var()
                 results_dict['PF_divergence'] = (results_dict['logpf_posterior'] - log_pf_prior_or_pb).mean().item()
 
         else:

@@ -508,12 +508,12 @@ class PosteriorPriorDGFN(nn.Module):
         return_dict['x'] = x_start
         times_to_detach = np.random.choice([t for t in sampling_times], int(sampling_length * detach_freq), replace=False)
 
-        b_noise = torch.randn_like(x)
 
         for i, t in tqdm(enumerate(backward_sampling_times), total=len(backward_sampling_times)):
 
             t_next = scheduler.next_timestep(t)
 
+            b_noise = torch.randn_like(x)
             new_x, mean, std = scheduler.add_noise(x_start, b_noise, timesteps=t_next, return_std=True)
 
             return_dict['logpb'] += self.posterior_node.get_logpf(x=new_x, mean=mean, std=std)
