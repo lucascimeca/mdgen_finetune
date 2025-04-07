@@ -426,7 +426,7 @@ class RTBTrainer(Trainer):
 
                 if self.config.vargrad:
                     results_dict['vargrad_var'] = vargrad_logzs.var()
-                results_dict['PF_divergence'] = (results_dict['logpf_posterior'] - log_pf_prior_or_pb).mean().item()
+                results_dict['PF_divergence'] = (results_dict['logpf_posterior'] - results_dict['logpf_prior']).mean().item()
 
         else:
             raise NotImplementedError("Back and forth not yet implemented")

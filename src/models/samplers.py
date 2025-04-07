@@ -288,6 +288,9 @@ class PosteriorPriorDGFN(nn.Module):
         self.logZ = T.nn.Parameter(T.tensor(0.).to(self.device))
         if not self.vargrad:
             self.logZ.requires_grad = True
+        else:
+            self.logZ.requires_grad = False
+        self.transforms = transforms
 
         self.lora = self.config.lora
         self.push_to_hf = self.config.push_to_hf
