@@ -568,11 +568,11 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
         while len(sqrt_one_minus_alpha_prod.shape) < len(original_samples.shape):
             sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
 
-        # x_mean = sqrt_alpha_prod * original_samples
-        # noisy_samples = x_mean + sqrt_one_minus_alpha_prod * noise
-        x_drift = sqrt_alpha_prod * original_samples
-        x_mean = sqrt_one_minus_alpha_prod * noise
-        noisy_samples = x_mean + x_drift
+        x_mean = sqrt_alpha_prod * original_samples
+        noisy_samples = x_mean + sqrt_one_minus_alpha_prod * noise
+        # x_drift = sqrt_alpha_prod * original_samples
+        # x_mean = sqrt_one_minus_alpha_prod * noise
+        # noisy_samples = x_mean + x_drift
 
         if return_std:
             # std of the backward policy
@@ -653,11 +653,11 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
             std = std.unsqueeze(-1)
 
         # Deterministically compute the new state.
-        # mean = x_scale * x
-        # x_noised = mean - std * noise
-        bkw_mean = std * noise
-        bkw_drift = x_scale * x
-        x_noised = bkw_drift + bkw_mean
+        mean = x_scale * x
+        x_noised = mean + std * noise
+        # bkw_mean = std * noise
+        # bkw_drift = x_scale * x
+        # x_noised = bkw_drift + bkw_mean
 
         if scheduled_std:
             # std of the backward policy
