@@ -452,7 +452,7 @@ class PosteriorPriorDGFN(nn.Module):
                 new_x = new_x if sample_from_prior else posterior_new_x
 
                 # get prior pf
-                return_dict['logpf_prior'] += self.prior_node.get_logpf(x=new_x)
+                return_dict['logpf_prior'] += self.prior_node.get_logpf(x=new_x).detach()
 
                 # get posterior pf
                 return_dict['logpf_posterior'] += self.posterior_node.get_logpf(x=new_x)
