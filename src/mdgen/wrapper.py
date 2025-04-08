@@ -413,14 +413,24 @@ class NewMDGenWrapper(Wrapper):
             B, T, L, _ = latents.shape
         return B, T, L, self.latent_dim
 
-    def sample_prior_latent(self, B, T, L, device='cpu'):
+    def sample_prior_latent(self, B, T, L, device='cpu', uniform=False):
         if self.args.design:
-            zs_continuous = torch.randn(B, T, L, self.latent_dim - 20, device==device)
+            # Handle continuous part
+            if uniform:
+                # Uniform distribution over [-3, 3] for the continuous component
+                zs_continuous = 6 * torch.rand(B, T, L, self.latent_dim - 20, device=device) - 3
+            else:
+                zs_continuous = torch.randn(B, T, L, self.latent_dim - 20, device=device)
+            # Discrete part (already uniform over simplex via Dirichlet)
             zs_discrete = torch.distributions.Dirichlet(torch.ones(B, L, 20, device=device)).sample()
             zs_discrete = zs_discrete[:, None].expand(-1, T, -1, -1)
             zs = torch.cat([zs_continuous, zs_discrete], -1)
         else:
-            zs = torch.randn(B, T, L, self.latent_dim, device=self.device)
+            if uniform:
+                # Uniform distribution over [-3, 3] for the full latent vector
+                zs = 6 * torch.rand(B, T, L, self.latent_dim, device=self.device) - 3
+            else:
+                zs = torch.randn(B, T, L, self.latent_dim, device=self.device)
         return zs
 
     def inference(self, batch, zs0=None):

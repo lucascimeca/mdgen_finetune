@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-methods=('rtb')
+methods=('tb', 'rtb')
 betas=('1.' '1e6')
 replay_buffers=('False')
 vargrads=('True')

@@ -56,7 +56,7 @@ class SourceSampler:
     def sample(self, T=None, L=None):
         if T is None: T = self.T
         if L is None: L = self.L
-        return prior_model.model.sample_prior_latent(args.batch_size, T, L, device=args.device)
+        return prior_model.model.sample_prior_latent(args.batch_size, T, L, device=args.device, uniform=True)
 
 
 trainer = DiffuserTrainer(
