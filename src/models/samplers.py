@@ -422,6 +422,8 @@ class PosteriorPriorDGFN(nn.Module):
 
         for i, t in tqdm(enumerate(sampling_times), total=len(sampling_times)):
 
+            t_next = scheduler.next_timestep(t) # t_next = t + step -> since later the step function naturally goes from t_next to t_next + step = t
+
             t_specific_args = {
                 'noise': None if t > 0. else 0.,
                 'condition_noise': None if t > 0. else 0.,
@@ -438,7 +440,7 @@ class PosteriorPriorDGFN(nn.Module):
             step_args['detach'] = True
 
             # -- make step in x by prior model -- (updates internal values of mean and std for prior node)
-            new_x = self.prior_node(x, t, **step_args).detach()
+            new_x = self.prior_node(x, t_next, **step_args).detach()
 
             if not sample_from_prior_only:
 
@@ -449,7 +451,7 @@ class PosteriorPriorDGFN(nn.Module):
                 step_args['detach'] = False
 
                 # # -- make a step in x by posterior model -- (updates internal values of mean and std for posterior node)
-                posterior_new_x = self.posterior_node(x, t, **step_args).detach()
+                posterior_new_x = self.posterior_node(x, t_next, **step_args).detach()
 
                 new_x = new_x if sample_from_prior else posterior_new_x
 

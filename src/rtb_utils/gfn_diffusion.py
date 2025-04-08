@@ -82,15 +82,14 @@ def get_DDPM_diffuser_pipeline(args, prior_model, outsourced_sampler=None):
         )
         outsourced_posterior = get_peft_model(outsourced_posterior, unet_lora_config).to(args.device)
 
-
     noise_scheduler = DDPMGFNScheduler(
         num_train_timesteps=args.traj_length,
         num_inference_steps=args.sampling_length,
         beta_end=0.02,
         beta_start=0.0001,
         beta_schedule="squaredcos_cap_v2",
-        clip_sample=False,
-        clip_sample_range=1,
+        clip_sample=True,
+        clip_sample_range=100,
         variance_type='fixed_large'
     )
     oursourced_posterior_pipeline = DDPMGFNPipeline(unet=outsourced_posterior, scheduler=noise_scheduler)
@@ -107,7 +106,6 @@ def get_DDPM_diffuser_pipeline(args, prior_model, outsourced_sampler=None):
         diff_gfn.half()
 
     return diff_gfn
-
 
 
 class Trainer:
@@ -715,13 +713,16 @@ class DiffuserTrainer():
                     # After each epoch you optionally sample some demo images with evaluate() and save the model
                     if (it % self.config.save_image_epochs == 0 or it == self.config.num_epochs - 1):
 
-                        logs.update(FinetunePlotter.generate_plots(
-                            prior_model=self.sampler.prior_model,
-                            reward_function=self.reward_function,
-                            sampler=self.sampler,
-                            config=self.config,
-                            cond_args=self.cond_args
-                        ))
+                        try:
+                            logs.update(FinetunePlotter.generate_plots(
+                                prior_model=self.sampler.prior_model,
+                                reward_function=self.reward_function,
+                                sampler=self.sampler,
+                                config=self.config,
+                                cond_args=self.cond_args
+                            ))
+                        except Exception as e:
+                            print("no plots could be generated, the prior likely needs to train for longer")
 
                     wandb.log(logs, step=it)  # log results in wandb
 

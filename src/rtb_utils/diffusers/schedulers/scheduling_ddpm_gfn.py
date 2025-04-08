@@ -527,6 +527,9 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
                     variance_noise = randn_tensor(
                         model_output.shape, generator=generator, device=device, dtype=model_output.dtype
                     )
+                elif isinstance(noise, float):
+                    # noise is a float, use it as std
+                    variance_noise = noise * torch.ones_like(model_output)
                 else:
                     # given noise
                     variance_noise = noise.to(model_output.dtype).to(device)
