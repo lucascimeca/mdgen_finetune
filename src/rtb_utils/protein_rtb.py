@@ -526,42 +526,41 @@ class ProteinRTBModel(nn.Module):
 
         if self.load_ckpt:
             self.model, optimizer, load_it = self.load_checkpoint(self.model, optimizer)
-            if not self.tb:
-                self.ref_model = copy.deepcopy(self.model).to(self.device)
-                self.ref_model = self.ref_model.eval()
-                if self.config.lora:
-                    unet_lora_config = LoraConfig(
-                        r=self.config.rank,
-                        lora_alpha=self.config.rank,
-                        init_lora_weights="gaussian",
-                        target_modules=[
-                            # IPA layers – attention projections and feed-forward blocks
-                            "linear_q",
-                            "linear_kv",
-                            "linear_q_points",
-                            "linear_kv_points",
-                            "linear_out",
-                            "q_proj",
-                            "k_proj",
-                            "v_proj",
-                            "out_proj",
-                            "fc1",
-                            "fc2",
-                            # Projection from embedding back to latent space
-                            "emb_to_latent.linear",
-                            # Time embedder MLP layers (typically the 0th and 2nd layers are linear)
-                            "t_embedder.mlp.0",
-                            "t_embedder.mlp.2",
-                        ],
-                    )
-                    self.model = get_peft_model(self.model, unet_lora_config).to(self.device)
-                    prior_params = sum(p.numel() for p in self.ref_model.parameters())
-                    posterior_params = sum(p.numel() for p in self.model.parameters())
-                    trainable_posterior_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-                    print(f"\nTotal params: "
-                          f"\nPRIOR model: {prior_params / 1e6:.2f}M "
-                          f"\nPOSTERIOR model: {posterior_params / 1e6:.2f}M"
-                          f"\nTrainable posterior parameters: {trainable_posterior_params / 1e6:.2f}M/{posterior_params / 1e6:.2f}M  ({trainable_posterior_params * 100 / posterior_params:.2f}%)\n")
+            self.ref_model = copy.deepcopy(self.model).to(self.device)
+            self.ref_model = self.ref_model.eval()
+            if self.config.lora:
+                unet_lora_config = LoraConfig(
+                    r=self.config.rank,
+                    lora_alpha=self.config.rank,
+                    init_lora_weights="gaussian",
+                    target_modules=[
+                        # IPA layers – attention projections and feed-forward blocks
+                        "linear_q",
+                        "linear_kv",
+                        "linear_q_points",
+                        "linear_kv_points",
+                        "linear_out",
+                        "q_proj",
+                        "k_proj",
+                        "v_proj",
+                        "out_proj",
+                        "fc1",
+                        "fc2",
+                        # Projection from embedding back to latent space
+                        "emb_to_latent.linear",
+                        # Time embedder MLP layers (typically the 0th and 2nd layers are linear)
+                        "t_embedder.mlp.0",
+                        "t_embedder.mlp.2",
+                    ],
+                )
+                self.model = get_peft_model(self.model, unet_lora_config).to(self.device)
+                prior_params = sum(p.numel() for p in self.ref_model.parameters())
+                posterior_params = sum(p.numel() for p in self.model.parameters())
+                trainable_posterior_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+                print(f"\nTotal params: "
+                      f"\nPRIOR model: {prior_params / 1e6:.2f}M "
+                      f"\nPOSTERIOR model: {posterior_params / 1e6:.2f}M"
+                      f"\nTrainable posterior parameters: {trainable_posterior_params / 1e6:.2f}M/{posterior_params / 1e6:.2f}M  ({trainable_posterior_params * 100 / posterior_params:.2f}%)\n")
 
         else:
             load_it = 0
