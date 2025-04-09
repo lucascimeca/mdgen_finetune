@@ -81,7 +81,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
 
     parser.add_argument('--use_prior_drift', type=strtobool, default=False)
 
-    parser.add_argument('--prior_sampling', type=strtobool, default=True, help='Whether to use prior sampling for stability.')
+    parser.add_argument('--prior_sampling', type=strtobool, default=False, help='Whether to use prior sampling for stability.')
     parser.add_argument('--prior_sampling_ratio', type=float, default=.1, help='Ratio to sample from prior.')
 
     parser.add_argument('-rb', '--replay_buffer', type=strtobool, default=False, help='Whether to use replay buffer.')
