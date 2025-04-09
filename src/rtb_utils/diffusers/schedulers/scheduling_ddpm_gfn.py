@@ -573,9 +573,9 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
 
         x_mean = sqrt_alpha_prod * original_samples
         noisy_samples = x_mean + sqrt_one_minus_alpha_prod * noise
-        # x_drift = sqrt_alpha_prod * original_samples
+        # std = sqrt_alpha_prod * original_samples
         # x_mean = sqrt_one_minus_alpha_prod * noise
-        # noisy_samples = x_mean + x_drift
+        # noisy_samples = x_mean + std
 
         if return_std:
             # std of the backward policy
@@ -646,8 +646,8 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
         x_scale = (a_end / a_source) ** 0.5
 
         # Compute the effective noise coefficient for the transition.
-        # std = (1 - a_end) ** 0.5 - x_scale * (1 - a_source) ** 0.5
-        std = (1 - a_source) ** 0.5 * (x_scale + 1)
+        std = (1 - a_end) ** 0.5 - x_scale * (1 - a_source) ** 0.5
+        # std = (1 - a_source) ** 0.5 * (x_scale + 1)
 
         # Broadcast scalars to the shape of x.
         while len(x_scale.shape) < len(x.shape):
@@ -664,9 +664,7 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
 
         if scheduled_std:
             # std of the backward policy
-            if self.variance_type == "fixed_small_log":
-                std = self._get_variance(t_end)
-            elif self.variance_type == "learned_range":
+            if self.variance_type == "fixed_small_log" or self.variance_type == "learned_range":
                 std = self._get_variance(t_end)
             else:
                 std = (self._get_variance(t_end) ** 0.5)
@@ -709,6 +707,9 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
                 self.num_inference_steps if self.num_inference_steps else self.config.num_train_timesteps
             )
             prev_t = timestep - self.config.num_train_timesteps // num_inference_steps
+
+        if timestep == self.config.num_train_timesteps-1:
+            prev_t += 1
 
         return prev_t
 
