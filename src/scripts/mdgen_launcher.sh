@@ -22,3 +22,5 @@ for method in "${methods[@]}"; do
       done
     done
 done
+
+sbatch mdgen_finetune.sh rtb 5e-6 1. True False

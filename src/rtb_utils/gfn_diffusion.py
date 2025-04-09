@@ -374,7 +374,7 @@ class RTBTrainer(Trainer):
             results_dict = self.sampler(
                 xs=x_0,
                 batch_size=batch_size,
-                sample_from_prior=self.config.prior_sampling and it % self.config.prior_sampling_every == 0,
+                sample_from_prior=self.config.prior_sampling and random.random() < self.config.prior_sampling_ratio,
                 detach_freq=self.config.detach_freq,
                 condition=cond
             )

@@ -440,7 +440,7 @@ class PosteriorPriorDGFN(nn.Module):
             step_args['detach'] = True
 
             # -- make step in x by prior model -- (updates internal values of mean and std for prior node)
-            new_x = self.prior_node(x, t_next, **step_args).detach()
+            prior_new_x = self.prior_node(x, t_next, **step_args).detach()
 
             if not sample_from_prior_only:
 
@@ -453,7 +453,7 @@ class PosteriorPriorDGFN(nn.Module):
                 # -- make a step in x by posterior model -- (updates internal values of mean and std for posterior node)
                 posterior_new_x = self.posterior_node(x, t_next, **step_args).detach()
 
-                new_x = new_x if sample_from_prior else posterior_new_x
+                new_x = prior_new_x if sample_from_prior else posterior_new_x
 
                 # get prior pf
                 return_dict['logpf_prior'] += self.prior_node.get_logpf(x=new_x).detach()
