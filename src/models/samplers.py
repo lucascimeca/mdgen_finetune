@@ -531,7 +531,7 @@ class PosteriorPriorDGFN(nn.Module):
             step_args.update(t_specific_args)
 
             # -- make a backward step in x, compute mean and var in place by posterior model --
-            self.posterior_node(new_x, t, **step_args)
+            self.posterior_node(new_x, t_next, **step_args)
 
             # get posterior pf
             return_dict['logpf_posterior'] += maybe_detach(self.posterior_node.get_logpf(x=x.detach()), t, times_to_detach)
@@ -539,7 +539,7 @@ class PosteriorPriorDGFN(nn.Module):
             # ------ compute prior pf for posterior step --------
             # update internal values of pfs and logvar for prior -- inplace
             step_args['detach'] = True
-            self.prior_node(new_x, t, **step_args)
+            self.prior_node(new_x, t_next, **step_args)
 
             # get prior pf, given posterior move
             return_dict['logpf_prior'] += self.prior_node.get_logpf(x=x.detach()).detach()
