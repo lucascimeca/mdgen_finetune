@@ -149,8 +149,9 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
         'method',
         'energy_temperature',
         'vargrad',
-        'replay_buffer',
-        'load_outsourced_ckpt'
+        # 'replay_buffer',
+        # 'load_outsourced_ckpt'
+        'prior_sampling'
     ]
     args.exp_name = f"{'_'.join([f'{k}_{args.__dict__[k]}' for k in exp_critical_args])}" + "var_rw" # todo remove new
     if len(args.exp_name) == 0:
