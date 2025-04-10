@@ -214,6 +214,7 @@ class Trainer:
                 if loss is not None:
                     self.accelerator.backward(loss)
 
+            self.accelerator.clip_grad_norm_(self.sampler.posterior_node.policy.unet.parameters(), 10.0)
             self.opt.step()
             self.opt.zero_grad()
 
