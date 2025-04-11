@@ -89,8 +89,8 @@ def get_DDPM_diffuser_pipeline(args, prior_model, outsourced_sampler=None):
         beta_start=0.0001,
         beta_schedule="squaredcos_cap_v2",
         prediction_type="v_prediction",
-        clip_sample=False,
-        clip_sample_range=100,
+        clip_sample=True,
+        clip_sample_range=1.5,
         variance_type='fixed_large'
     )
     oursourced_posterior_pipeline = DDPMGFNPipeline(unet=outsourced_posterior, scheduler=noise_scheduler)
@@ -214,7 +214,7 @@ class Trainer:
                 if loss is not None:
                     self.accelerator.backward(loss)
 
-            self.accelerator.clip_grad_norm_(self.sampler.posterior_node.policy.unet.parameters(), 10.0)
+            # self.accelerator.clip_grad_norm_(self.sampler.posterior_node.policy.unet.parameters(), 10.0)
             self.opt.step()
             self.opt.zero_grad()
 
