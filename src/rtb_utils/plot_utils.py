@@ -123,18 +123,18 @@ def plot_relative_distance_distributions(xyz, n_plots, target_dist, sample_size=
             all_jsd[coord_idx].append(jsd)
 
     # Calculate median scores
-    median_metrics = {
-        'median_emd_x': np.median(all_emd[0]),
-        'median_emd_y': np.median(all_emd[1]),
-        'median_emd_z': np.median(all_emd[2]),
-        'median_jsd_x': np.median(all_jsd[0]),
-        'median_jsd_y': np.median(all_jsd[1]),
-        'median_jsd_z': np.median(all_jsd[2]),
-    }
+    # median_metrics = {
+    #     'median_emd_x': np.median(all_emd[0]),
+    #     'median_emd_y': np.median(all_emd[1]),
+    #     'median_emd_z': np.median(all_emd[2]),
+    #     'median_jsd_x': np.median(all_jsd[0]),
+    #     'median_jsd_y': np.median(all_jsd[1]),
+    #     'median_jsd_z': np.median(all_jsd[2]),
+    # }
 
     return {
         "relative_distance_distributions": wandb.Image(fig),
-        **median_metrics
+        # **median_metrics
     }
 
 
