@@ -153,7 +153,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
         # 'load_outsourced_ckpt'
         'prior_sampling'
     ]
-    args.exp_name = f"{'_'.join([f'{k}_{args.__dict__[k]}' for k in exp_critical_args])}" + "normal" # todo remove new
+    args.exp_name = f"{'_'.join([f'{k}_{args.__dict__[k]}' for k in exp_critical_args])}" + "untrained" # todo remove new
     if len(args.exp_name) == 0:
         args.exp_name = f"mdgen_finetune_{args.model}"
     args.exp_name = f"{exp_prepend}_{args.exp_name}"
