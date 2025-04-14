@@ -53,5 +53,5 @@ python ../outsourced_train_posterior.py --epochs 5000 --traj_length 1000 --sampl
                                         --vargrad $4 --vargrad_sample_n0 4 --test_sample_size 50 \
                                         --load_outsourced_path ../../pretrained/mdgen_source_sampler.bin \
                                         --push_to_wandb True --resume True --load_outsourced_ckpt False \
-                                        --prior_sampling True --prior_sampling_ratio 0.2 \
+#                                        --prior_sampling True --prior_sampling_ratio 0.2 \
                                         --rb_ratio .2 -rb $5
