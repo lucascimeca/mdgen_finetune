@@ -2,8 +2,8 @@
 
 methods=('rtb')
 betas=('1.')
-#replay_buffers=('False')
-replay_buffers=('True')
+replay_buffers=('False')
+#replay_buffers=('True')
 vargrads=('True')
 
 for method in "${methods[@]}"; do

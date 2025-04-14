@@ -28,7 +28,7 @@ seed_experiment(args.seed)
 reward_model = Amber14Reward(
     device=args.device,
     energy_temperature=args.energy_temperature,
-    implicit=True
+    implicit=False
 )
 r_str = "ss_div_seed_" + str(args.seed)
 reward_args = []
