@@ -348,8 +348,7 @@ class RTBTrainer(Trainer):
             self.opt = type(self.opt.optimizer)([{'params': params,
                                                   'lr': self.config.learning_rate},
                                                  {'params': [self.sampler.logZ],
-                                                  'lr': self.config.lr_logZ,
-                                                  'weight_decay': self.config.z_weight_decay}])
+                                                  'lr': self.config.lr_logZ}])
             self.opt.load_state_dict(checkpoint["optimizer_state_dict"])
             it = checkpoint["it"]
             print(f"***** RESUMING PREVIOUS RUN AT IT={it}")
