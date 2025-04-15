@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-methods=('tb')
+methods=('rtb')
 betas=('1.')
 replay_buffers=('False')
 #replay_buffers=('True')
@@ -9,9 +9,9 @@ vargrads=('True')
 for method in "${methods[@]}"; do
   # Set learning rate depending on the method
 #  if [ "$method" == "rtb" ]; then
-#  lr="6e-4"
+  lr="6e-4"
 #  else
-  lr="1e-5"
+#  lr="1e-5"
 #  fi
 
   for beta in "${betas[@]}"; do
