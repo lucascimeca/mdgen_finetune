@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
-methods=('rtb')
+methods=('rtb', 'tb')
 betas=('1.')
 replay_buffers=('False')
-#replay_buffers=('True')
 vargrads=('True')
 
 for method in "${methods[@]}"; do

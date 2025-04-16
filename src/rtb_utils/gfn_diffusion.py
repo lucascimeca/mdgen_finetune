@@ -3,7 +3,7 @@ import diffusers
 from diffusers import DDPMPipeline, DDPMScheduler
 from peft import LoraConfig, get_peft_model
 from rtb_utils.pytorch_utils import NoContext, freeze_model, unfreeze_model, safe_reinit, Logger
-from rtb_utils.plot_utils import compare_distributions, plot_relative_distance_distributions
+from rtb_utils.plot_utils import compare_distributions, plot_relative_distance_distributions, plot_TICA
 from models.samplers import PosteriorPriorDGFN, PosteriorPriorDGFN, PosteriorPriorBaselineSampler
 
 from rtb_utils.replay_buffer import ReplayBuffer
@@ -314,10 +314,14 @@ class FinetunePlotter: # self.sampler.prior_model, self.reward_function, self.sa
                 sampler.prior_model.target_dist['log_r'].detach().cpu(),
                 rwd_logs['log_r'].to(sampler.device).detach().cpu())
             )
-            logs.update(plot_relative_distance_distributions(
-                xyz=rwd_logs['x'],
-                n_plots=4,  # Show 4 comparison columns
-                target_dist=sampler.prior_model.target_dist['x']
+            # logs.update(plot_relative_distance_distributions(
+            #     xyz=rwd_logs['x'],
+            #     n_plots=4,  # Show 4 comparison columns
+            #     target_dist=sampler.prior_model.target_dist['x']
+            # ))
+            logs.update(plot_TICA(
+                samples_torsions=rwd_logs['torsions'],
+                target_torsion=sampler.prior_model.target_dist['torsions']
             ))
 
         return logs

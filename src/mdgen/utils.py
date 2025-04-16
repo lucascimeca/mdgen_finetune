@@ -13,6 +13,7 @@ def get_offsets(ref_frame, rigids):
     else:
         return ref_frame.invert().compose(rigids).to_tensor_7()
 
+
 def simplex_proj(seq):
     """Algorithm from https://arxiv.org/abs/1309.1541 Weiran Wang, Miguel Á. Carreira-Perpiñán"""
     Y = seq.reshape(-1, seq.shape[-1])
@@ -59,9 +60,11 @@ def atom14_to_pdb(atom14, aatype, path):
     prots = []
     for i, pos in enumerate(atom14):
         pos = atom14_to_atom37(pos, aatype)
+
         prots.append(create_full_prot(pos, aatype=aatype))
     with open(path, 'w') as f:
         f.write(prots_to_pdb(prots))
+    return pos
 
 
 def create_full_prot(

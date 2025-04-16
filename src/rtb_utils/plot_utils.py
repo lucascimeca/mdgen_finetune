@@ -138,4 +138,85 @@ def plot_relative_distance_distributions(xyz, n_plots, target_dist, sample_size=
     }
 
 
+def compute_tica(X, lag=1):
+    # Center the data.
+    X_centered = X - np.mean(X, axis=0)
+    T = X_centered.shape[0] - lag
+    # Build time-lagged pairs:
+    X0 = X_centered[:-lag]
+    Xlag = X_centered[lag:]
 
+    # Estimate the instantaneous (zero-lag) covariance matrix.
+    C0 = np.dot(X0.T, X0) / T
+    # Estimate the time-lagged covariance matrix.
+    Clag = np.dot(X0.T, Xlag) / T
+
+    # Use pseudoinverse for C0 to avoid singularity issues.
+    eigvals, eigvecs = np.linalg.eig(np.linalg.pinv(C0) @ Clag)
+
+    # Sort eigenvectors (and eigenvalues) by eigenvalue magnitude (largest first).
+    idx = np.argsort(-np.abs(eigvals))
+    return eigvecs[:, idx], eigvals[idx]
+
+
+def plot_TICA(samples_torsions, target_torsion, lag_time=1, point_size=15, alpha=0.5):
+    """
+    Create a 2D TICA plot that overlaps the distributions of the
+    target torsions and sampled torsions.
+
+    Both torsions are given as numpy arrays of shape (B, 4, 7, 2) where:
+        B   - batch dimension (e.g. frames in a trajectory)
+        4   - could be different subunits or portions
+        7   - number of torsion angles per unit
+        2   - the (sin, cos) representation of each angle
+
+    The function flattens the last three dimensions (4*7*2 = 56 features per frame)
+    then computes a TICA projection (using the target torsions as the reference time series)
+    and projects both the target and sampled torsions onto the first two TICA components.
+
+    Parameters:
+        samples_torsions (np.ndarray): Sampled torsions, shape (B,4,7,2).
+        target_torsion   (np.ndarray): Target torsions, shape (B,4,7,2).
+        lag_time (int): Lag time (in time-steps) for TICA computation. Defaults to 1.
+        point_size (int or float): Marker size for scatter plot.
+        alpha (float): Transparency of the scatter plot markers.
+
+    Returns:
+        dict: A dictionary with a key "TICA" containing the plot as a wandb.Image.
+    """
+    # Flatten each sample from (4,7,2) to a vector of 56 features.
+    B = target_torsion.shape[0]
+    X_target = target_torsion.reshape(B, -1)  # shape: (B, 56)
+    X_samples = samples_torsions.reshape(B, -1)  # shape: (B, 56)
+
+    # Compute TICA components using the target torsions as the reference.
+    # (Assumes the time ordering of the B samples is meaningful.)
+    v, eigvals = compute_tica(X_target, lag=lag_time)
+
+    # Choose the first two tICs to project onto.
+    # Note: v is (D, D) so we take the first two columns and retain only the real parts.
+    V2 = v[:, :2].real  # shape: (56, 2)
+
+    # Project the data onto these two tICs.
+    X_target_tica = np.dot(X_target, V2)  # shape: (B, 2)
+    X_samples_tica = np.dot(X_samples, V2)  # shape: (B, 2)
+
+    # Create the plot.
+    fig, ax = plt.subplots(figsize=(8, 6))
+    # Plot the target distribution.
+    ax.scatter(X_target_tica[:, 0], X_target_tica[:, 1],
+               s=point_size, c='blue', alpha=alpha, label='Target')
+    # Plot the sampled distribution.
+    ax.scatter(X_samples_tica[:, 0], X_samples_tica[:, 1],
+               s=point_size, c='red', alpha=alpha, label='Sampled')
+
+    ax.set_xlabel('tIC1')
+    ax.set_ylabel('tIC2')
+    ax.set_title('TICA Projection of Torsions')
+    ax.legend()
+    plt.tight_layout()
+
+    # Return the figure wrapped as a wandb.Image.
+    return {
+        "TICA": wandb.Image(fig),
+    }

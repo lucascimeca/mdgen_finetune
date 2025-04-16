@@ -111,6 +111,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
 
     parser.add_argument('--load_outsourced_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')
     parser.add_argument('--load_outsourced_path', default='../pretrained/', type=str, help='Path to load model checkpoint')
+    parser.add_argument('--implicit', default=False, type=strtobool, help='Whether to load checkpoint')
 
     args = parser.parse_args()
     state = {k: v for k, v in args._get_kwargs()}
@@ -150,7 +151,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
         # 'energy_temperature',
         # 'vargrad',
         # 'replay_buffer',
-        'load_outsourced_ckpt'
+        'load_outsourced_ckpt',
         'lora',
         # 'prior_sampling'
     ]

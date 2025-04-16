@@ -181,16 +181,19 @@ class MDGenSimulator:
 
         return atom14, new_batch
 
-    def fix_and_save_pdbs(self, frames):
+    def fix_and_save_pdbs(self, frames, torsions=True):
 
+        torsions = []
         for i in range(len(frames)):
             pdb_path = os.path.join(self.out_dir, f"{self.peptide}_{i}.pdb")
-            atom14_to_pdb(frames[i].unsqueeze(0).cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), pdb_path)
+            pos37 = atom14_to_pdb(frames[i].unsqueeze(0).cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), pdb_path)
 
             fixer = PDBFixer(filename=pdb_path)
             fixer.missingResidues = {}
             fixer.findMissingAtoms()
             fixer.addMissingAtoms()
+
+            torsions.append(atom37_to_torsions(pos37, aatype=self.batch['seqres'][0].cpu().numpy())[0].numpy())
 
             with open(pdb_path, 'w') as f:
                 PDBFile.writeFile(fixer.topology, fixer.positions, f, True)
@@ -210,6 +213,10 @@ class MDGenSimulator:
             # Save the trajectory as an xtc file.
             xtc_path = os.path.join(self.out_dir, f"{self.peptide}.xtc")
             traj.save(xtc_path)
+
+        if torsions:
+            torsions_path = os.path.join(self.out_dir, f"{self.peptide}_torsions.npy")
+            np.save(torsions_path, np.stack(torsions))
 
     def sample(self, zs0=None):
         """

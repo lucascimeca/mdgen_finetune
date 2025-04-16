@@ -84,6 +84,7 @@ class Amber14Reward(nn.Module):
         pdb = PDBFile(f'{data_path}/4AA_sims/FLRH/{sequence}.pdb')
         traj = mdtraj.load(f'{tmp_dir}{sequence}.xtc',
                            top=f'{tmp_dir}{sequence}_0.pdb')
+        torsions = np.load(f'{tmp_dir}{sequence}_torsions.npy')
 
         energies = []
 
@@ -135,7 +136,8 @@ class Amber14Reward(nn.Module):
 
         return {
             'log_r': -torch.FloatTensor(energies)/self.energy_temperature,
-            'x': traj.xyz
+            'x': traj.xyz,
+            'torsions': torsions,
         }
 
 

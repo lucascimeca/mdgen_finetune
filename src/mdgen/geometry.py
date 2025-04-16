@@ -202,7 +202,6 @@ def atom37_to_torsions(all_atom_positions, aatype, all_atom_mask=None):
     return torsion_angles_sin_cos, torsion_angles_mask
 
 
-
 def prot_to_frames(ca_coords, c_coords, n_coords):
     prot_frames = Rigid.from_3_points(
         torch.from_numpy(c_coords),
@@ -214,6 +213,7 @@ def prot_to_frames(ca_coords, c_coords, n_coords):
     rots[2, 2] = -1
     rots = Rotation(rot_mats=rots)
     return prot_frames.compose(Rigid(rots, None))
+
 
 def atom14_to_frames(atom14):
     n_coords = atom14[:,:,rc.atom_order['N']]
