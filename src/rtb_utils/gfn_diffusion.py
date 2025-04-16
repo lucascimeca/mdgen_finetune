@@ -314,11 +314,11 @@ class FinetunePlotter: # self.sampler.prior_model, self.reward_function, self.sa
                 sampler.prior_model.target_dist['log_r'].detach().cpu(),
                 rwd_logs['log_r'].to(sampler.device).detach().cpu())
             )
-            # logs.update(plot_relative_distance_distributions(
-            #     xyz=rwd_logs['x'],
-            #     n_plots=4,  # Show 4 comparison columns
-            #     target_dist=sampler.prior_model.target_dist['x']
-            # ))
+            logs.update(plot_relative_distance_distributions(
+                xyz=rwd_logs['x'],
+                n_plots=4,  # Show 4 comparison columns
+                target_dist=sampler.prior_model.target_dist['x']
+            ))
             logs.update(plot_TICA_PCA(
                 samples_torsions=rwd_logs['torsions'],
                 target_torsion=sampler.prior_model.target_dist['torsions']
