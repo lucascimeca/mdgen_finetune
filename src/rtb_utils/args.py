@@ -147,11 +147,12 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
         # 'sampling_length',
         # 'batch_size',
         'method',
-        'energy_temperature',
-        'vargrad',
+        # 'energy_temperature',
+        # 'vargrad',
         # 'replay_buffer',
-        # 'load_outsourced_ckpt'
-        'prior_sampling'
+        'load_outsourced_ckpt'
+        'lora',
+        # 'prior_sampling'
     ]
     args.exp_name = f"{'_'.join([f'{k}_{args.__dict__[k]}' for k in exp_critical_args])}" + "lorartb" # todo remove new
     if len(args.exp_name) == 0:
