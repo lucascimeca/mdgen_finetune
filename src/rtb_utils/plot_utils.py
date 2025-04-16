@@ -6,6 +6,8 @@ import wandb
 
 from scipy.stats import wasserstein_distance
 from scipy.stats import entropy
+from sklearn.preprocessing import RobustScaler
+from sklearn.decomposition import PCA
 
 
 # For Jensen-Shannon Divergence
@@ -220,3 +222,63 @@ def plot_TICA(samples_torsions, target_torsion, lag_time=1, point_size=15, alpha
     return {
         "TICA": wandb.Image(fig),
     }
+
+
+def plot_TICA_PCA(samples_torsions, target_torsion, point_size=15, alpha=0.5, scale=False):
+    """
+    Create a 2D projection using PCA which, with lag=1, approximates the TICA projection.
+
+    Both torsions are given as numpy arrays of shape (B, 4, 7, 2), where:
+      - B: Batch dimension (e.g., frames)
+      - 4: Possibly different subunits or segments
+      - 7: Number of torsion angles per subunit
+      - 2: (sin, cos) representation of each angle
+
+    The function flattens each sample from (4,7,2) to a vector of 56 features,
+    robustly scales the data, and then applies PCA to compute a 2D projection.
+    It then overlaps the target distribution (blue) with the sampled distribution (red)
+    in a scatter plot.
+
+    Parameters:
+      samples_torsions (np.ndarray): Sampled torsions, shape (B,4,7,2).
+      target_torsion   (np.ndarray): Target torsions, shape (B,4,7,2).
+      point_size (int or float): Marker size for the scatter plot.
+      alpha (float): Transparency of the markers.
+
+    Returns:
+      dict: A dictionary with key "TICA" containing the plot as a wandb.Image.
+    """
+
+    # Flatten the torsion data so that each sample becomes a 56-dimensional vector.
+    B = target_torsion.shape[0]
+    X_target = target_torsion.reshape(B, -1)  # shape: (B, 56)
+    X_samples = samples_torsions.reshape(B, -1)  # shape: (B, 56)
+
+    if scale:
+        # Robust Scaling to make the PCA more robust to outliers.
+        scaler = RobustScaler()
+        X_target = scaler.fit_transform(X_target)
+        X_samples = scaler.transform(X_samples)
+
+    # Apply PCA directly to compute the principal components.
+    # With lag=1 TICA, much of the time-structure is not emphasized,
+    # so PCA often gives a similar projection.
+    pca = PCA(n_components=2)
+    X_target_pca = pca.fit_transform(X_target)
+    X_samples_pca = pca.transform(X_samples)
+
+    # Create the scatter plot to compare the target and sampled projections.
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.scatter(X_target_pca[:, 0], X_target_pca[:, 1],
+               s=point_size, c='blue', alpha=alpha, label='Target')
+    ax.scatter(X_samples_pca[:, 0], X_samples_pca[:, 1],
+               s=point_size, c='red', alpha=alpha, label='Sampled')
+
+    ax.set_xlabel('Component 1')
+    ax.set_ylabel('Component 2')
+    ax.set_title('PCA Projection (Approximates TICA with lag=1)')
+    ax.legend()
+    plt.tight_layout()
+
+    label = "TICA" if not scale else "TICA_scaled"
+    return {label: wandb.Image(fig)}
