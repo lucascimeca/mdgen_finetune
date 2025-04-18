@@ -416,6 +416,7 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
         return_dict: bool = True,
         noise: torch.FloatTensor = None,
         target: torch.FloatTensor = None,
+        xT_type: Optional[str] = 'gaussian',
         **kwargs,
     ) -> Union[DDPMGFNSchedulerOutput, Tuple]:
         """
@@ -523,10 +524,15 @@ class DDPMGFNScheduler(SchedulerMixin, ConfigMixin):
                 variance_noise = (target - pred_prev_sample)/variance
             else:
                 if noise is None:
-                    # random noise
-                    variance_noise = randn_tensor(
-                        model_output.shape, generator=generator, device=device, dtype=model_output.dtype
-                    )
+                    if xT_type == 'uniform':
+                        # uniform random noise
+                        variance_noise = 6 * torch.rand(*model_output.shape, device=device, dtype=model_output.dtype) - 3
+                    else:
+                        # gaussian random noise
+                        variance_noise = randn_tensor(
+                            model_output.shape, generator=generator, device=device, dtype=model_output.dtype
+                        )
+
                 elif isinstance(noise, float):
                     # noise is a float, use it as std
                     variance_noise = noise * torch.ones_like(model_output)

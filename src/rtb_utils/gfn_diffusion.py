@@ -385,7 +385,7 @@ class RTBTrainer(Trainer):
                 batch_size=batch_size,
                 sample_from_prior=self.config.prior_sampling and random.random() < self.config.prior_sampling_ratio,
                 detach_freq=self.config.detach_freq,
-                condition=cond
+                condition=cond,
             )
 
             # get reward
@@ -574,7 +574,18 @@ def evaluate(batch_size, epoch, pipeline, folder, inference_steps=50, seed=123):
 
 class DiffuserTrainer():
 
-    def __init__(self, config, model, sampler, source_sampler, scheduler, optimizer, lr_scheduler, reward_function):
+    def __init__(
+            self,
+            config,
+            model,
+            sampler,
+            source_sampler,
+            scheduler,
+            optimizer,
+            lr_scheduler,
+            reward_function,
+            xT_type = "gaussian",
+    ):
         self.config = config
         self.model = model
         self.sampler = sampler
@@ -583,6 +594,7 @@ class DiffuserTrainer():
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.reward_function = reward_function
+        self.xT_type = xT_type
 
         self.accelerator = Accelerator(
             mixed_precision=self.config.mixed_precision,
@@ -666,7 +678,11 @@ class DiffuserTrainer():
             clean_images = self.source_sampler.sample()
 
             # Sample noise to add to the images
-            noise = torch.randn(clean_images.shape, device=clean_images.device)
+            if self.xT_type == 'uniform':
+                noise = torch.rand(clean_images.shape, device=clean_images.device) * 6 - 3
+            else:
+                noise = torch.randn(clean_images.shape, device=clean_images.device)
+
             bs = clean_images.shape[0]
 
             # Sample a random timestep for each image

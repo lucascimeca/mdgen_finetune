@@ -59,6 +59,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     parser.add_argument('--vargrad_sample_n0', default=4, type=int, help='How many samples to use for vargrad.')
     parser.add_argument('--energy_temperature', default=1., type=float, help='temperature of energy function.')
     parser.add_argument('--conditional', default=False, type=strtobool, help='This will run the conditional version of the models. Use only in conjuction with inverse_conditional_finetune.py at the moment.')
+    parser.add_argument('--xT_type', default="gaussian", type=str, help='Type of source distribution for sampler (can be gaussian or uniform).')
 
     parser.add_argument('--snr_training', default=True, type=strtobool, help='Whether to use snr scaling loss for prior training.')
     parser.add_argument('--snr_gamma', default=5., type=float, help='Clipping value for snr loss.')

@@ -53,6 +53,7 @@ class HGFNode(nn.Module):
             variance_type='fixed_small',
             train=False,
             clip=True,
+            xT_type='gaussian',
             *args,
             **kwargs
     ):
@@ -69,6 +70,7 @@ class HGFNode(nn.Module):
         self.training = train
         self.variance_type = variance_type
 
+        self.xT_type = xT_type
         self.policy = policy_model
         if not self.config.checkpointing and not isinstance(self.policy.unet, nn.DataParallel):
             self.policy.unet = nn.DataParallel(self.policy.unet).to(self.device)
@@ -198,6 +200,7 @@ class HGFNode(nn.Module):
             langevin_correction=langevin_correction,
             noise=noise,
             target=target,
+            xT_type=self.xT_type,
         )
         self.posterior_mean = results.posterior_mean.to(self.device)
         self.posterior_std = results.posterior_std.to(self.device)
@@ -268,6 +271,7 @@ class PosteriorPriorDGFN(nn.Module):
                              sampling_step=self.sampling_step,
                              ddim=self.ddim,
                              clip=outsourced_prior_policy.scheduler.config.clip_sample,
+                             xT_type=self.config.xT_type,
                              train=False)
         self.register_module('prior_node', prior_node)
 
@@ -276,6 +280,7 @@ class PosteriorPriorDGFN(nn.Module):
                                  x_dim=dim,
                                  clip=outsourced_posterior_policy.scheduler.config.clip_sample,
                                  sampling_step=self.sampling_step,
+                                 xT_type=self.config.xT_type,
                                  train=True)
 
         self.prior_model = prior_model
@@ -395,17 +400,21 @@ class PosteriorPriorDGFN(nn.Module):
 
         return_dict = {}
 
-        normal_dist = torch.distributions.Normal(torch.zeros((batch_size,) + tuple(self.dim), device=self.device),
-                                                 torch.ones((batch_size,) + tuple(self.dim), device=self.device))
+        if self.config.xT_type == 'uniform':
+            xT_dist = torch.distributions.Uniform(torch.ones((batch_size,) + tuple(self.dim), device=self.device) * -3,
+                                                      torch.ones((batch_size,) + tuple(self.dim), device=self.device) * 3)
+        else:
+            xT_dist = torch.distributions.Normal(torch.zeros((batch_size,) + tuple(self.dim), device=self.device),
+                                                     torch.ones((batch_size,) + tuple(self.dim), device=self.device))
 
-        x = normal_dist.sample() if x_start is None else x_start
+        x = xT_dist.sample() if x_start is None else x_start
         if self.mixed_precision and 'cuda' in self.device:
             x = x.half()
 
         x_start = x.clone()
-        return_dict['logpf_posterior'] = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
-        return_dict['logpf_prior'] = normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
-        return_dict['logpb'] = 0 * normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
+        return_dict['logpf_posterior'] = xT_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
+        return_dict['logpf_prior'] = xT_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
+        return_dict['logpb'] = 0 * xT_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
 
         self.posterior_node.policy.scheduler.set_timesteps(sampling_length)
         self.prior_node.policy.scheduler.set_timesteps(sampling_length)
@@ -483,6 +492,7 @@ class PosteriorPriorDGFN(nn.Module):
             detach_freq=0.,
             sampling_length=None,
             condition=None,
+            xT_type='gaussian',
             *args,
             **kwargs
     ):
@@ -516,7 +526,11 @@ class PosteriorPriorDGFN(nn.Module):
 
             t_next = scheduler.next_timestep(t)
 
-            b_noise = torch.randn_like(x)
+            if xT_type == 'uniform':
+                b_noise = torch.rand_like(x) * 6 - 3
+            else:
+                b_noise = torch.randn_like(x)
+
             new_x, mean, std = scheduler.add_noise(x_start, b_noise, timesteps=t_next, return_std=True)
 
             return_dict['logpb'] += self.posterior_node.get_logpf(x=new_x, mean=mean, std=std)
@@ -548,18 +562,22 @@ class PosteriorPriorDGFN(nn.Module):
 
             x = new_x
 
-        normal_dist = torch.distributions.Normal(torch.zeros((len(x),) + tuple(self.dim), device=self.device),
-                                                 torch.ones((len(x),) + tuple(self.dim), device=self.device))
+        if xT_type == 'uniform':
+            xT_dist = torch.distributions.Uniform(torch.ones((len(x),) + tuple(self.dim), device=self.device) * -3,
+                                                      torch.ones((len(x),) + tuple(self.dim), device=self.device) * 3)
+        else:
+            xT_dist = torch.distributions.Normal(torch.zeros((len(x),) + tuple(self.dim), device=self.device),
+                                                     torch.ones((len(x),) + tuple(self.dim), device=self.device))
 
-        return_dict['logpf_posterior'] += normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
-        return_dict['logpf_prior'] += normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
+        return_dict['logpf_posterior'] += xT_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
+        return_dict['logpf_prior'] += xT_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
         # return_dict['logpb'] += normal_dist.log_prob(x).sum(tuple(range(1, len(x.shape)))).to(self.device)
 
         return_dict['x'] = x
 
         return return_dict
 
-    def sample_back_and_forth(self, batch_size=None, steps=50, detach_freq=0., sampling_length=None):
+    def sample_back_and_forth(self, batch_size=None, steps=50, detach_freq=0., sampling_length=None, xT_type='gaussian'):
 
         assert self.dataloader is not None, 'please provide a batch of starting samples x'
 
@@ -567,8 +585,12 @@ class PosteriorPriorDGFN(nn.Module):
 
         sampling_length = sampling_length if sampling_length is not None else self.sampling_length
 
-        normal_dist = torch.distributions.Normal(torch.zeros((len(x),) + tuple(self.dim), device=self.device),
-                                                 torch.ones((len(x),) + tuple(self.dim), device=self.device))
+        if xT_type == 'uniform':
+            xT_dist = torch.distributions.Uniform(torch.ones((batch_size,) + tuple(self.dim), device=self.device) * -3,
+                                                      torch.ones((batch_size,) + tuple(self.dim), device=self.device) * 3)
+        else:
+            xT_dist = torch.distributions.Normal(torch.zeros((batch_size,) + tuple(self.dim), device=self.device),
+                                                     torch.ones((batch_size,) + tuple(self.dim), device=self.device))
 
         self.posterior_node.policy.scheduler.set_timesteps(sampling_length)
         self.prior_node.policy.scheduler.set_timesteps(sampling_length)
@@ -590,7 +612,12 @@ class PosteriorPriorDGFN(nn.Module):
         x_start = x[:]
         return_dict['x'] = x_start
         times_to_detach = np.random.choice([t for t in sampling_times], int(sampling_length * detach_freq), replace=False)
-        backward_noise = torch.randn_like(x)
+
+        if xT_type == 'uniform':
+            backward_noise = torch.rand_like(x) * 6 - 3
+        else:
+            backward_noise = torch.randn_like(x)
+
         for i, t in tqdm(enumerate(backward_sampling_times), total=len(backward_sampling_times)):
 
             t_specific_args = {
@@ -714,7 +741,7 @@ class PosteriorPriorDGFN(nn.Module):
             
         return True
 
-    def compute_prior_reward(self, samples=None, no_of_samples=100, batch_size=32, peptide=None, rewards=None, n_traj_per_sample=10, sampling_length=None, reference_img=None, metric_only=False, *args, **kwargs):
+    def compute_prior_reward(self, samples=None, no_of_samples=100, batch_size=32, peptide=None, rewards=None, n_traj_per_sample=10, sampling_length=None, reference_img=None, metric_only=False, xT_type='gaussian', *args, **kwargs):
 
         return_dict = {}
         with torch.no_grad():
@@ -786,7 +813,12 @@ class PosteriorPriorDGFN(nn.Module):
 
             x_start = x[:]
             res['x'] = x_start
-            backward_noise = torch.randn_like(x)
+
+            if xT_type == 'uniform':
+                backward_noise = torch.rand_like(x) * 6 - 3
+            else:
+                backward_noise = torch.randn_like(x)
+
             for i, t in tqdm(enumerate(backward_sampling_times), total=len(backward_sampling_times)):
                 t_specific_args = {
                     'noise': backward_noise,  # fix noise for backward process
@@ -814,9 +846,13 @@ class PosteriorPriorDGFN(nn.Module):
 
                 x = x_next
 
-        normal_dist = torch.distributions.Normal(torch.zeros_like(x, device=self.device),
-                                                 torch.ones_like(x, device=self.device))
-        res['logpf_prior'] += normal_dist.log_prob(x_next).sum(tuple(range(1, len(x.shape))))
+        if xT_type == 'uniform':
+            xT_dist = torch.distributions.Uniform(torch.ones((batch_size,) + tuple(self.dim), device=self.device) * -3,
+                                                      torch.ones((batch_size,) + tuple(self.dim), device=self.device) * 3)
+        else:
+            xT_dist = torch.distributions.Normal(torch.zeros((batch_size,) + tuple(self.dim), device=self.device),
+                                                     torch.ones((batch_size,) + tuple(self.dim), device=self.device))
+        res['logpf_prior'] += xT_dist.log_prob(x_next).sum(tuple(range(1, len(x.shape))))
 
         log_prior_prob = (res['logpf_prior'] - res['logpb']).view(-1, n_traj_per_sample).logsumexp(dim=1) - np.log(n_traj_per_sample)
 
@@ -997,8 +1033,20 @@ class PosteriorPriorBaselineSampler(PosteriorPriorDGFN):
         self.cla = cla
         self.particles = particles
 
-    def forward(self, condition=None, batch_size=None, sampling_length=None, sample_from_prior=False,
-                sample_from_prior_only=False, peptide=None, mc=None, particles=None, *args, **kwargs):
+    def forward(
+            self,
+            condition=None,
+            batch_size=None,
+            sampling_length=None,
+            sample_from_prior=False,
+            sample_from_prior_only=False,
+            peptide=None,
+            mc=None,
+            particles=None,
+            xT_type='gaussian',
+            *args,
+            **kwargs
+    ):
 
         if sample_from_prior_only:
             sample_from_prior = True
@@ -1025,18 +1073,29 @@ class PosteriorPriorBaselineSampler(PosteriorPriorDGFN):
         else:
             image_shape = (batch_size, config.in_channels, *config.sample_size)
 
-        image = randn_tensor(image_shape).to(self.device)  # noise
+        if xT_type == 'uniform':
+            image = torch.rand(image_shape).to(self.device) * 6 - 3
+        else:
+            image = randn_tensor(image_shape).to(self.device)  # noise
+
         if condition is not None:
-            condition_noise = randn_tensor(condition.shape).to(self.device)
+            if xT_type == 'uniform':
+                condition_noise = torch.rand(condition.shape).to(self.device) * 6 - 3
+            else:
+                condition_noise = randn_tensor(condition.shape).to(self.device)
 
         if self.mixed_precision and 'cuda' in self.device:
             image = image.half()
 
-        normal_dist = torch.distributions.Normal(torch.zeros((batch_size,) + tuple(self.dim), device=self.device),
+        if xT_type == 'uniform':
+            xT_dist = torch.distributions.Uniform(torch.ones((batch_size,) + tuple(self.dim), device=self.device) * -3,
+                                                      torch.ones((batch_size,) + tuple(self.dim), device=self.device) * 3)
+        else:
+            xT_dist = torch.distributions.Normal(torch.zeros((batch_size,) + tuple(self.dim), device=self.device),
                                                  torch.ones((batch_size,) + tuple(self.dim), device=self.device))
 
-        return_dict['logpf_posterior'] = normal_dist.log_prob(image).sum(tuple(range(1, len(image.shape)))).to(self.device)
-        return_dict['logpf_prior'] = normal_dist.log_prob(image).sum(tuple(range(1, len(image.shape)))).to(self.device)
+        return_dict['logpf_posterior'] = xT_dist.log_prob(image).sum(tuple(range(1, len(image.shape)))).to(self.device)
+        return_dict['logpf_prior'] = xT_dist.log_prob(image).sum(tuple(range(1, len(image.shape)))).to(self.device)
 
         # set step values
         self.prior_node.policy.scheduler.set_timesteps(sampling_length)
@@ -1047,7 +1106,7 @@ class PosteriorPriorBaselineSampler(PosteriorPriorDGFN):
             model_output = self.prior_node.policy.unet(image, t.item()).sample
 
             # 2. compute previous image: x_t -> x_t-1
-            res = self.prior_node.policy.scheduler.step(model_output, t, image)
+            res = self.prior_node.policy.scheduler.step(model_output, t, image, xT_type=xT_type)
             image_t_minus_1 = res.prev_sample  # x_t-1 according to prior
 
             if not sample_from_prior:
@@ -1064,10 +1123,15 @@ class PosteriorPriorBaselineSampler(PosteriorPriorDGFN):
                     sigma_t = res.posterior_std
                     r_t = sigma_t / torch.sqrt(1 + sigma_t ** 2)
 
+                    if xT_type == 'uniform':
+                        rnd_fun = torch.rand_like * 6 - 3
+                    else:
+                        rnd_fun = torch.randn_like
+
                     differences = [
                         noisy_condition -
                         self.prior_node.policy.scheduler.add_noise(
-                            self.reward_function(x_0_hat + torch.randn_like(x_0_hat) * r_t, forward_only=True, temperature=self.config.energy_temperature),
+                            self.reward_function(x_0_hat + rnd_fun(x_0_hat) * r_t, forward_only=True, temperature=self.config.energy_temperature),
                             condition_noise,
                             t
                         )

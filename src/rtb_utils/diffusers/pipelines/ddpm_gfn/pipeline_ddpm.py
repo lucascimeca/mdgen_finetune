@@ -56,6 +56,7 @@ class DDPMGFNPipeline(DiffusionPipeline):
         return_dict: bool = True,
         x_shape: Optional[Tuple[int]] = None,
         condition: Optional[dict] = None,
+        noise_type: Optional[str] = 'gaussian',
     ) -> Union[ImagePipelineOutput, Tuple]:
         r"""
         The call function to the pipeline for generation.
@@ -111,11 +112,18 @@ class DDPMGFNPipeline(DiffusionPipeline):
             image_shape = (batch_size, *x_shape)
 
         if self.device.type == "mps":
-            # randn does not work reproducibly on mps
-            image = randn_tensor(image_shape, generator=generator)
-            image = image.to(self.device)
+            if noise_type == 'uniform':
+                image = 6 * torch.rand(*image_shape, generator=generator) - 3
+            else:
+                # randn does not work reproducibly on mps
+                image = randn_tensor(image_shape, generator=generator)
+                image = image.to(self.device)
         else:
-            image = randn_tensor(image_shape, generator=generator, device=self.device)
+
+            if noise_type == 'uniform':
+                image = 6 * torch.rand(*image_shape, generator=generator) - 3
+            else:
+                image = randn_tensor(image_shape, generator=generator, device=self.device)
 
         # set step values
         self.scheduler.set_timesteps(num_inference_steps)
