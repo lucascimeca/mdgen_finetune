@@ -90,7 +90,7 @@ def get_DDPM_diffuser_pipeline(args, prior_model, outsourced_sampler=None):
         beta_schedule="squaredcos_cap_v2",
         prediction_type="v_prediction",
         clip_sample=True,
-        clip_sample_range=3.5,
+        clip_sample_range=3,
         variance_type='fixed_large'
     )
     oursourced_posterior_pipeline = DDPMGFNPipeline(unet=outsourced_posterior, scheduler=noise_scheduler)
