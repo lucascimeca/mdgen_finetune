@@ -33,17 +33,15 @@ reward_model = Amber14Reward(
 r_str = "ss_div_seed_" + str(args.seed)
 reward_args = []
 prior_model = MDGenSimulator(
-    peptide=args.peptide,
     sim_ckpt=f'{args.load_path}forward_sim.ckpt',
     data_dir=f'{args.data_path}4AA_data',
     split=f'{args.splits_path}4AA_test.csv',
     num_rollouts=1,
     num_frames=args.num_frames,
-    retain=args.test_sample_size,
     xtc=True,
     out_dir=f"{args.save_folder}/samples/",
     suffix='_i100',
-    config=args
+    config=args,
 )
 
 ddpm_pipeline = get_DDPM_diffuser_pipeline(args, prior_model)

@@ -250,9 +250,8 @@ def plot_TICA_PCA(samples_torsions, target_torsion, point_size=15, alpha=0.5, sc
     """
 
     # Flatten the torsion data so that each sample becomes a 56-dimensional vector.
-    B = target_torsion.shape[0]
-    X_target = target_torsion.reshape(B, -1)  # shape: (B, 56)
-    X_samples = samples_torsions.reshape(B, -1)  # shape: (B, 56)
+    X_target = target_torsion.reshape(target_torsion.shape[0], -1)  # shape: (B, 56)
+    X_samples = samples_torsions.reshape(samples_torsions.shape[0], -1)  # shape: (B, 56)
 
     if scale:
         # Robust Scaling to make the PCA more robust to outliers.

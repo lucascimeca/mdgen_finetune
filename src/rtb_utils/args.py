@@ -64,8 +64,6 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     parser.add_argument('--snr_training', default=True, type=strtobool, help='Whether to use snr scaling loss for prior training.')
     parser.add_argument('--snr_gamma', default=5., type=float, help='Clipping value for snr loss.')
 
-    parser.add_argument('--peptide', type=str, default='FLRH', help='Peptide to use.')
-
     parser.add_argument('--traj_length', default=100, type=int, help='Legth of trajectory.')
     parser.add_argument('--sampling_length', default=100, type=int, help='Legth of sampling traj. If sampling_length < traj_length then DDPM automatically kicks in.')
     parser.add_argument('--learning_cutoff', default=1e-1, type=float, help='Cut-off for allowed closeness of prior/posterior given inpferfect TB assumption.')
@@ -86,11 +84,22 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     parser.add_argument('--prior_sampling_ratio', type=float, default=.1, help='Ratio to sample from prior.')
 
     parser.add_argument('-rb', '--replay_buffer', type=strtobool, default=False, help='Whether to use replay buffer.')
-    # parser.add_argument('--rb_every', type=int, default=8, help='after how many epochs to do rb sampling.')
     parser.add_argument('--rb_ratio', type=float, default=.2, help='after how many epochs to do rb sampling.')
     parser.add_argument('--rb_size', default=1000, type=int, help='Max size of replay buffer.')
     parser.add_argument('--rb_sample_strategy', default='uniform', type=str, help='Sampling strategy from replay buffer (uniform/reward)')
     parser.add_argument('--rb_beta', default=1.0, type=float, help='Inverse temperature of sampling disctribution (unused for uniform)')
+
+    # MDGen specific args
+    parser.add_argument('--peptide', type=str, default='FLRH', help='Peptide to use.')
+    parser.add_argument('--overfit_peptide', type=str, default=None, help='Keep it None for finetuning.')
+    parser.add_argument('--overfit', type=bool, default=False, help='Keep it False for finetuning.')
+    parser.add_argument('--atlas', type=bool, default=False, help='Keep it False for finetuning.')
+    parser.add_argument('--suffix', type=str, default="_i100", help='suffix.')
+    parser.add_argument('--frame_interval', type=int, default=10, help='frame interval.')
+    parser.add_argument('--num_frames', type=int, default=1, help='num frames.')
+    parser.add_argument('--overfit_frame', type=bool, default=False, help='overfit frame.')
+    parser.add_argument('--copy_frames', type=bool, default=False, help='copy frames.')
+    parser.add_argument('--no_frames', type=bool, default=False, help='no frames.')
 
     # lora
     parser.add_argument('--lora', default=True, type=strtobool, help='low rank approximation training.')
@@ -131,6 +140,9 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
     #     args.accumulate_gradient_every = int(32/args.batch_size)
     #     print(f"*forcing '--accumulate_gradient_every' to {args.accumulate_gradient_every}"
     #           f"\n*effective batch size: {args.batch_size * args.accumulate_gradient_every}")
+
+    if args.vargrad and args.test_sample_size % args.batch_size != 0:
+        args.test_sample_size = args.test_sample_size + args.test_sample_size % args.vargrad_sample_n0
 
     # if we're doing batch train logic let's turn off checkpointing
     if args.rtb_batched_train:

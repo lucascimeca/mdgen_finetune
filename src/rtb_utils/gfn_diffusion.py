@@ -117,12 +117,10 @@ class Trainer:
             sampler,
             reward_function,
             config,
-            peptide,
             save_folder,
             optimizer,
             train_loader=None,
             test_loader=None,
-            scorer=True,
             *args,
             **kwargs
     ):
@@ -193,7 +191,7 @@ class Trainer:
         self.x_dim = sampler.dim
         self.sampler, self.opt = self.accelerator.prepare(self.sampler, self.opt)
 
-    def run(self, peptide, epochs=5000, **sampler_kwargs):
+    def run(self, peptide=None, epochs=5000, **sampler_kwargs):
         it = 0
 
         self.resume()
@@ -209,7 +207,7 @@ class Trainer:
             for si in range(self.config.accumulate_gradient_every):
                 print(f"it {it} [{si + 1}/{self.config.accumulate_gradient_every}] : ".endswith(""))
 
-                loss, results_dict = self.sampler_step(peptide, cond=self.cond_args, it=it)
+                loss, results_dict = self.sampler_step(it, peptide=peptide, cond=self.cond_args)
 
                 if loss is not None:
                     self.accelerator.backward(loss)
@@ -229,7 +227,10 @@ class Trainer:
                         reward_function=self.reward_function,
                         sampler=self.sampler,
                         config=self.config,
-                        cond_args=self.cond_args
+                        cond_args=self.sampler.prior_model.get_cond_args(device=self.config.device,
+                                                                         multi_peptide=it % 250 == 0,
+                                                                         size=self.config.test_sample_size),
+                        all_peptides=it % 250 == 0,
                     )
 
                     results_dict.update(plot_logs)
@@ -281,53 +282,68 @@ class Trainer:
 
 class FinetunePlotter: # self.sampler.prior_model, self.reward_function, self.sampler, self.config, self.sampler.config.data_path, self.cond_args
     @staticmethod
-    def generate_plots(prior_model, reward_function, sampler, config, cond_args):
+    def generate_plots(prior_model, reward_function, sampler, config, cond_args, all_peptides=False):
         """generate plots for current prior/posterior modeled distribution"""
+
+        batch = cond_args[1]
+        cond_args = cond_args[0]
+
         logs = {}
         context = NoContext() if config.method in ['dps', 'fps'] else torch.no_grad()
         with context:
-            # compute distribution change
-            if prior_model.target_dist is None:
-                print("data energy distribution has yet to be computed. Computing...")
-                # save all the frames from the actual data
-                prior_model.fix_and_save_pdbs(torch.FloatTensor(prior_model.batch_arr))
-                # save all the frames from the actual data
-                prior_model.target_dist = reward_function(prior_model.peptide,
-                                                          data_path=config.data_path,
-                                                          tmp_dir=prior_model.out_dir)
-                print("Done!")
+            peptides = np.unique(cond_args['peptide'])
+            for peptide in peptides:
+                if peptide not in prior_model.target_dist:
+                    # compute distribution change
+                    print("data energy distribution has yet to be computed. Computing...")
+                    # save all the frames from the actual data
+                    file_path = os.path.join(prior_model.data_dir, f"{peptide}{prior_model.suffix}.npy")
+                    arr = np.lib.format.open_memmap(file_path, 'r')
+                    idxes = np.random.randint(0, len(arr), size=config.test_sample_size)
+                    prior_model.fix_and_save_pdbs(torch.FloatTensor(arr[idxes]), peptide)
+
+            # save all the frames from the actual data
+            prior_model.target_dist = reward_function(data_path=config.data_path, tmp_dir=prior_model.out_dir)[0]
+            print("Done!")
 
             print("Generating energy distribution for current model iteration")
+
             results_dict = sampler(
                 batch_size=config.test_sample_size,
                 condition=cond_args
             )
-            prior_model.sample(zs0=results_dict['x'].to(config.device).detach())  # sample in place, forms pdbs on disk
-            rwd_logs = reward_function(
-                prior_model.peptide,
+            _, _, _, paths = prior_model.sample(batch=batch, zs0=results_dict['x'].to(config.device).detach())  # sample in place, forms pdbs on disk
+            rwd_logs, logrs = reward_function(
+                paths=paths,
                 data_path=sampler.config.data_path,
                 tmp_dir=sampler.prior_model.out_dir
             )  # compute reward of whatever is in data_path, then cleans it up
 
-            print("Distribution generated!")
-            logs.update(compare_distributions(
-                sampler.prior_model.target_dist['log_r'].detach().cpu(),
-                rwd_logs['log_r'].to(sampler.device).detach().cpu())
-            )
-            logs.update(plot_relative_distance_distributions(
-                xyz=rwd_logs['x'],
-                n_plots=4,  # Show 4 comparison columns
-                target_dist=sampler.prior_model.target_dist['x']
-            ))
-            logs.update(plot_TICA_PCA(
-                samples_torsions=rwd_logs['torsions'],
-                target_torsion=sampler.prior_model.target_dist['torsions']
-            ))
-            logs.update(plot_TICA_PCA(
-                samples_torsions=rwd_logs['torsions'],
-                target_torsion=sampler.prior_model.target_dist['torsions'],
-                scale=True
-            ))
+            for peptide in peptides:
+                logs[peptide] = {}
+
+                print("Distribution generated!")
+                logs[peptide].update(compare_distributions(
+                    sampler.prior_model.target_dist[peptide]['log_r'].detach().cpu(),
+                    rwd_logs[peptide]['log_r'].to(sampler.device).detach().cpu())
+                )
+                logs[peptide].update(plot_relative_distance_distributions(
+                    xyz=rwd_logs[peptide]['x'],
+                    n_plots=4,  # Show 4 comparison columns
+                    target_dist=sampler.prior_model.target_dist[peptide]['x']
+                ))
+                logs[peptide].update(plot_TICA_PCA(
+                    samples_torsions=rwd_logs[peptide]['torsions'],
+                    target_torsion=sampler.prior_model.target_dist[peptide]['torsions']
+                ))
+                logs[peptide].update(plot_TICA_PCA(
+                    samples_torsions=rwd_logs[peptide]['torsions'],
+                    target_torsion=sampler.prior_model.target_dist[peptide]['torsions'],
+                    scale=True
+                ))
+
+                if not all_peptides:
+                    break
 
         return logs
 
@@ -339,13 +355,13 @@ class RTBTrainer(Trainer):
             sampler,
             reward_function,
             config,
-            peptide,
             save_folder,
             optimizer,
+            peptide=None,
             *args,
             **kwargs
     ):
-        super().__init__(sampler, reward_function, config, peptide, save_folder, optimizer, *args, **kwargs)
+        super().__init__(sampler, reward_function, config, save_folder, optimizer, peptide, *args, **kwargs)
 
     def resume(self):
         """handles resuming of training from experiment folder"""
@@ -362,13 +378,15 @@ class RTBTrainer(Trainer):
             it = checkpoint["it"]
             print(f"***** RESUMING PREVIOUS RUN AT IT={it}")
 
-    def sampler_step(self, peptide, it, cond=None, back_and_forth=False, *args, **kwargs):
+    def sampler_step(self, it, peptide=None, cond=None, back_and_forth=False, *args, **kwargs):
+
+        cond_args, batch = cond
         """handles one training step"""
         if not back_and_forth:
             # ------ do regular finetuning ------
 
-            if cond['x_cond'].shape[0] > 1:
-                batch_size = cond['x_cond'].shape[0]
+            if cond_args['x_cond'].shape[0] > 1:
+                batch_size = cond_args['x_cond'].shape[0]
             else:
                 batch_size = self.config.batch_size
 
@@ -385,21 +403,17 @@ class RTBTrainer(Trainer):
                 batch_size=batch_size,
                 sample_from_prior=self.config.prior_sampling and random.random() < self.config.prior_sampling_ratio,
                 detach_freq=self.config.detach_freq,
-                condition=cond,
+                condition=cond_args,
             )
 
             # get reward
             if logr_x_prime is None:
-                self.sampler.prior_model.sample(zs0=results_dict['x'].to(self.config.device).detach())  # sample in place, forms pdbs on disk
-                rwd_logs = self.reward_function(
-                    self.sampler.prior_model.peptide,
+                _, _, _, paths = self.sampler.prior_model.sample(batch=batch, zs0=results_dict['x'].to(self.config.device).detach())  # sample in place, forms pdbs on disk
+                rwd_logs, logr_x_prime = self.reward_function(
+                    paths=paths,
                     data_path=self.sampler.config.data_path,
                     tmp_dir=self.sampler.prior_model.out_dir
                 )  # compute reward of whatever is in data_path, then cleans it up
-                logr_x_prime = rwd_logs['log_r'].to(self.sampler.device)
-                # todo remove debug lines
-                # logr_x_prime = (- results_dict['x'] ** 2).view(results_dict['x'].shape[0], -1).mean(1)
-                # logr_x_prime = results_dict['x'].var(0).mean().repeat(results_dict['x'].shape[0])
 
             self.running_dist = logr_x_prime
 
@@ -411,19 +425,24 @@ class RTBTrainer(Trainer):
                     log_pf_prior_or_pb = results_dict['logpf_prior']
 
                 if self.config.vargrad:
-                    if cond['x_cond'].shape[0] > 1:
-                        i = 0
-                        estimates = []
-                        while i < results_dict['x'].shape[0]:
-                            estimates += [(- results_dict['logpf_posterior'][i:i+self.config.vargrad_sample_n0]
-                                           + log_pf_prior_or_pb[i:i+self.config.vargrad_sample_n0]
-                                           + logr_x_prime[i:i+self.config.vargrad_sample_n0]).mean().detach()] * self.config.vargrad_sample_n0
-                            i += self.config.vargrad_sample_n0
-                        self.sampler.logZ.data = torch.FloatTensor(estimates).to(self.config.device)
+
+                    if cond_args['x_cond'].shape[0] > 1:
+                        results_dict['logZ'] = {}
+                        peptides = np.unique(cond_args['peptide'])
+                        vargrad_logzs = torch.zeros(len(cond_args['peptide'])).float()
+                        for peptide in peptides:
+                            idx = [i for i in range(len(cond_args['peptide'])) if peptide == cond_args['peptide'][i]]
+                            vargrad = (- results_dict['logpf_posterior'][idx]
+                                       + log_pf_prior_or_pb[idx]
+                                       + logr_x_prime[idx]).mean().detach()
+
+                            results_dict['logZ'][peptide] = vargrad.item()
+                            vargrad_logzs[idx] = vargrad
                     else:
                         vargrad_logzs = (- results_dict['logpf_posterior'] + log_pf_prior_or_pb + logr_x_prime).detach()
                         with torch.no_grad():
                             self.sampler.logZ.data = vargrad_logzs.mean()
+                        results_dict['logZ'] = self.sampler.logZ.item()
 
                 # compute loss rtb for posterior
                 loss = 0.5 * (((results_dict['logpf_posterior'] + self.sampler.logZ - log_pf_prior_or_pb - logr_x_prime) ** 2)
@@ -434,6 +453,7 @@ class RTBTrainer(Trainer):
 
                 if self.config.vargrad:
                     results_dict['vargrad_var'] = vargrad_logzs.var()
+
                 results_dict['PF_divergence'] = (results_dict['logpf_posterior'] - results_dict['logpf_prior']).mean().item()
 
         else:
@@ -442,7 +462,7 @@ class RTBTrainer(Trainer):
         # log additional stuff & save
         results_dict['loss'] = loss.mean()
         results_dict['logr'] = logr_x_prime.mean()
-        results_dict['logZ'] = self.sampler.logZ.item()
+        results_dict['peptide_logrs'] = {peptide: rwd_logs[peptide]['log_r'].mean().item() for peptide in rwd_logs.keys()}
 
         if 'x' in results_dict.keys(): del results_dict['x']
         if 'x_prime' in results_dict.keys(): del results_dict['x_prime']
@@ -462,7 +482,7 @@ class FinetuneRTBTrainer(RTBTrainer, FinetunePlotter):
 
 class RTBBatchedTrainer(RTBTrainer):
 
-    def sampler_step(self, peptide, cond, back_and_forth=False, *args, **kwargs):
+    def sampler_step(self, peptide, cond_args, back_and_forth=False, *args, **kwargs):
         # ------ do batched finetuning ----
         # get some samples from data
 
@@ -476,7 +496,6 @@ class RTBBatchedTrainer(RTBTrainer):
 
             self.sampler.prior_model.sample(zs0=results_dict['x'])  # sample in place, forms pdbs on disk
             rwd_logs = self.reward_function(
-                self.sampler.prior_model.peptide,
                 data_path=self.sampler.config.data_path,
                 tmp_dir=self.sampler.prior_model.out_dir
             )  # compute reward of whatever is in data_path, then cleans it up
@@ -671,7 +690,7 @@ class DiffuserTrainer():
         progress_bar = tqdm(total=self.config.num_epochs, disable=not self.accelerator.is_local_main_process)
         progress_bar.set_description(f"Iteration: {it}")
 
-        self.cond_args = self.sampler.prior_model.get_cond_args(device=self.config.device)
+        cond_args = self.sampler.prior_model.get_cond_args(device=self.config.device)
 
         while it < self.config.num_epochs:
 
@@ -697,7 +716,7 @@ class DiffuserTrainer():
 
             with self.accelerator.accumulate(model):
                 # Predict the noise residual
-                noise_pred = model(noisy_images, timesteps, **self.cond_args)[0]
+                noise_pred = model(noisy_images, timesteps, **cond_args[0])[0]
 
                 if self.config.snr_training:
                     snr = compute_snr(self.noise_scheduler, timesteps)
@@ -745,7 +764,7 @@ class DiffuserTrainer():
                                 reward_function=self.reward_function,
                                 sampler=self.sampler,
                                 config=self.config,
-                                cond_args=self.cond_args
+                                cond_args=cond_args[0]
                             ))
                         except Exception as e:
                             print("no plots could be generated, the prior likely needs to train for longer")

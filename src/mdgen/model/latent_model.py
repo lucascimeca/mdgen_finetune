@@ -216,7 +216,7 @@ class LatentMDGenModel(nn.Module):
     def forward(self, x, t, mask,
                 start_frames=None, end_frames=None,
                 x_cond=None, x_cond_mask=None,
-                aatype=None
+                aatype=None, *args, **kwargs
                 ):
         if self.args.dynamic_mpnn:
             x = x[:, [0, -1]]
@@ -230,7 +230,8 @@ class LatentMDGenModel(nn.Module):
             mask = mask[:, :1]
 
         # addition to work with batch
-        mask = mask.repeat(x.shape[0], 1, 1)
+        if len(mask.shape) == 2:
+            mask = mask.repeat(x.shape[0], 1, 1)
         #######
 
         if self.args.design:

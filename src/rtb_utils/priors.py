@@ -1,12 +1,15 @@
 import glob
+from itertools import chain, repeat
 
 from openmm.app import PDBFile
 from pdbfixer import PDBFixer
+
 from mdgen.geometry import atom14_to_frames, atom14_to_atom37, atom37_to_torsions
 from mdgen.residue_constants import restype_order, restype_atom37_mask
 from mdgen.tensor_utils import tensor_tree_map
 from mdgen.wrapper import NewMDGenWrapper
 from mdgen.utils import atom14_to_pdb
+from mdgen.dataset import MDGenDataset
 
 import os
 import time
@@ -16,24 +19,24 @@ import tqdm
 import numpy as np
 import pandas as pd
 
-from rtb_utils.pytorch_utils import get_batch
+from rtb_utils.pytorch_utils import get_batch, cycle
 
 
 class MDGenSimulator:
     def __init__(self,
                  sim_ckpt,
                  data_dir,
-                 peptide,
+                 peptide=None,
                  split='splits/4AA_test.csv',
                  suffix='',
                  pdb_id=None,
                  num_frames=1,
                  num_rollouts=100,
-                 retain=300,
                  no_frames=False,
                  tps=False,
-                 xtc=False,
+                 xtc=True,
                  out_dir=".",
+                 config=None,
                  device=None):
         """
         Initialize the MDGenSimulator.
@@ -52,6 +55,8 @@ class MDGenSimulator:
             out_dir (str): Directory where results are saved.
             device: Torch device to run simulation on. If None, auto-detect.
         """
+        self.config = config
+
         self.sim_ckpt = sim_ckpt
         self.data_dir = data_dir
         self.split = split
@@ -79,65 +84,70 @@ class MDGenSimulator:
         # Load the split file.
         self.df = pd.read_csv(self.split, index_col='name')
 
-        item = self._get_batch(retain=retain)
-        self.batch = next(iter(torch.utils.data.DataLoader([item])))
-        self.batch = tensor_tree_map(lambda x: x.to(self.device), self.batch)
+        self.target_dist = {}
+
+        trainset = MDGenDataset(self.config,
+                                split="../splits/4AA_train.csv",
+                                peptide=self.peptide,
+                                data_dir=self.data_dir)
+
+        self.train_loader = iter(cycle(torch.utils.data.DataLoader(
+            trainset,
+            batch_size=int(self.config.batch_size // self.config.vargrad_sample_n0),
+            num_workers=0,
+            shuffle=True,
+        )))
+
+        self.batch = self._get_batch()
         self.dims = self.model.get_dims(self.batch)
 
-        self.target_dist = None
-
-    def _get_batch(self, retain=300):
+    def _get_batch(self, multi_peptide=True, size=None):
         """
         Prepare a batch for simulation.
 
         Returns:
             dict: A batch dictionary.
         """
-        file_path = os.path.join(self.data_dir, f"{self.peptide}{self.suffix}.npy")
-        arr = np.lib.format.open_memmap(file_path, 'r')
 
-        idxes = np.random.randint(0, len(arr), size=retain)
-        if not self.tps:  # if tps flag is not set, use only the first frame
-            self.batch_arr = np.copy(arr[idxes]).astype(np.float32)
-            arr = np.copy(arr[0:1]).astype(np.float32)
+        # its = size % 8
+        batch = next(self.train_loader)
+
+        if not self.config.vargrad or not multi_peptide:
+
+            if size is None:
+                multiplier = self.config.batch_size
+            else:
+                multiplier = size
+
+            for k, v in batch.items():
+                if k == 'name':
+                    batch[k] = [v[0]] * multiplier
+                else:
+                    batch[k] = v[0].unsqueeze(0).repeat_interleave(repeats=multiplier, dim=0)
         else:
-            self.batch_arr = arr
 
-        frames = atom14_to_frames(torch.from_numpy(arr))
-        seqres_tensor = torch.tensor([restype_order[c] for c in self.peptide])
-        atom37 = torch.from_numpy(atom14_to_atom37(arr, seqres_tensor[None])).float()
-        L = len(seqres_tensor)
-        mask = torch.ones(L)
+            if size is None:
+                multiplier = self.config.vargrad_sample_n0
+            else:
+                multiplier = size // batch['rots'].shape[0]
 
-        if self.no_frames:
-            return {
-                'atom37': atom37,
-                'seqres': seqres_tensor,
-                'mask': restype_atom37_mask[seqres_tensor],
-            }
-        torsions, torsion_mask = atom37_to_torsions(atom37, seqres_tensor[None])
-        return {
-            'torsions': torsions,
-            'torsion_mask': torsion_mask[0],
-            'trans': frames._trans,
-            'rots': frames._rots._rot_mats,
-            'seqres': seqres_tensor,
-            'mask': mask,
-        }
+            for k, v in batch.items():
+                if k == 'name':
+                    batch[k] = list(chain.from_iterable(repeat(x, multiplier) for x in v))
+                else:
+                    batch[k] = v.repeat_interleave(repeats=multiplier, dim=0)
 
-    def get_cond_args(self, device):
-        item = get_batch(self.peptide,
-                         self.peptide,
-                         tps=self.tps,
-                         no_frames=self.model.args.no_frames,
-                         data_dir=self.data_dir,
-                         suffix=self.suffix)
-        batch = next(iter(torch.utils.data.DataLoader([item])))
+        return batch
+
+    def get_cond_args(self, device, multi_peptide=True, size=None):
+        batch = self._get_batch(multi_peptide=multi_peptide, size=size)
+
         prep = self.model.prep_batch(batch)
         cond_args = prep['model_kwargs']
         for k, v in cond_args.items():
             cond_args[k] = v.to(device)
-        return cond_args
+        cond_args['peptide'] = batch['name']
+        return cond_args, batch
 
     def _rollout(self, batch, zs0=None):
         """
@@ -181,11 +191,12 @@ class MDGenSimulator:
 
         return atom14, new_batch
 
-    def fix_and_save_pdbs(self, frames, torsions=True):
+    def fix_and_save_pdbs(self, frames, peptide):
 
+        paths = []
         torsions = []
         for i in range(len(frames)):
-            pdb_path = os.path.join(self.out_dir, f"{self.peptide}_{i}.pdb")
+            pdb_path = os.path.join(self.out_dir, f"{peptide}_{i}.pdb")
             pos37 = atom14_to_pdb(frames[i].unsqueeze(0).cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), pdb_path)
 
             fixer = PDBFixer(filename=pdb_path)
@@ -195,13 +206,14 @@ class MDGenSimulator:
 
             torsions.append(atom37_to_torsions(pos37, aatype=self.batch['seqres'][0].cpu().numpy())[0].numpy())
 
+            paths.append(pdb_path)
             with open(pdb_path, 'w') as f:
                 PDBFile.writeFile(fixer.topology, fixer.positions, f, True)
 
         # Now, if xtc conversion is requested, load all individual pdb files and join them.
         if self.xtc:
             # Use glob to find all pdb files for this peptide.
-            pdb_paths = sorted(glob.glob(os.path.join(self.out_dir, f"{self.peptide}_*.pdb")))
+            pdb_paths = sorted(glob.glob(os.path.join(self.out_dir, f"{peptide}_*.pdb")))
             # Load each pdb file into a trajectory.
             traj_list = [mdtraj.load(p) for p in pdb_paths]
             # Join the trajectories into a single trajectory.
@@ -211,14 +223,15 @@ class MDGenSimulator:
             traj.superpose(traj)
 
             # Save the trajectory as an xtc file.
-            xtc_path = os.path.join(self.out_dir, f"{self.peptide}.xtc")
+            xtc_path = os.path.join(self.out_dir, f"{peptide}.xtc")
             traj.save(xtc_path)
 
         if torsions:
-            torsions_path = os.path.join(self.out_dir, f"{self.peptide}_torsions.npy")
+            torsions_path = os.path.join(self.out_dir, f"{peptide}_torsions.npy")
             np.save(torsions_path, np.stack(torsions))
+        return paths
 
-    def sample(self, zs0=None):
+    def sample(self, batch, zs0=None):
         """
         Run one simulation and generate the corresponding pdb file.
 
@@ -234,16 +247,22 @@ class MDGenSimulator:
               seqres (str): Residue sequence string.
           """
 
-        all_atom14 = []
-        start_time = time.time()
-        for _ in tqdm.trange(self.num_rollouts, desc=f"Rollouts for {self.peptide}"):
-            atom14, batch = self._rollout(self.batch, zs0=zs0)
-            all_atom14.append(atom14)
-        elapsed = time.time() - start_time
-        print(f"Simulation for {self.peptide} took {elapsed:.2f} seconds.")
+        peptides = np.array(batch['name'])
+        unique_peptides = np.unique(batch['name'])
+        all_paths = []
+        for peptide in unique_peptides:
+            start_time = time.time()
+            all_atom14 = []
+            idx = np.nonzero(peptides == peptide)[0]
+            custom_batch = {k: v[idx] if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+            for _ in tqdm.trange(self.num_rollouts, desc=f"Rollouts for {peptide}"):
+                atom14, _ = self._rollout(custom_batch, zs0=zs0[idx])
+                all_atom14.append(atom14)
+            elapsed = time.time() - start_time
+            print(f"Simulation for {peptide} took {elapsed:.2f} seconds.")
 
-        all_atom14 = torch.cat(all_atom14, 1)
+            all_atom14 = torch.cat(all_atom14, 1)
+            paths = self.fix_and_save_pdbs(frames=all_atom14.squeeze(1), peptide=peptide)
+            all_paths.extend(paths)
 
-        self.fix_and_save_pdbs(frames=all_atom14.squeeze(1))
-
-        return all_atom14[0].cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), self.out_dir
+        return all_atom14[0].cpu().numpy(), self.batch['seqres'][0].cpu().numpy(), self.out_dir, all_paths

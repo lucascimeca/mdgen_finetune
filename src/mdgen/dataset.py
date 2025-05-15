@@ -1,22 +1,44 @@
 import torch
+import os
+
 from .rigid_utils import Rigid
 from .residue_constants import restype_order
 import numpy as np
 import pandas as pd
 from .geometry import atom37_to_torsions, atom14_to_atom37, atom14_to_frames
-       
+
+
 class MDGenDataset(torch.utils.data.Dataset):
-    def __init__(self, args, split, repeat=1):
+    def __init__(self, args, split, repeat=1, data_dir=None, peptide=None):
         super().__init__()
-        self.df = pd.read_csv(split, index_col='name')
         self.args = args
         self.repeat = repeat
+        self.data_dir = data_dir if data_dir is not None else self.args.data_dir
+        self.df = self._validate_peptides(pd.read_csv(split, index_col='name'), peptide)
+
     def __len__(self):
         if self.args.overfit_peptide:
             return 1000
         return self.repeat * len(self.df)
 
+    def _validate_peptides(self, df, peptide=None):
+        exist_indices = []
+        for i in range(len(df)):
+            # check if peptide is in the dataframe, compile a list of indeces, then filter the df
+            name = df.index[i]
+
+            if peptide is not None and peptide != name:
+                continue
+
+            if self.args.atlas:
+                i = np.random.randint(1, 4)
+                name = f"{name}_R{i}"
+            if os.path.exists(f'{self.data_dir}/{name}{self.args.suffix}.npy'):
+                exist_indices.append(i)
+        return df.iloc[exist_indices]
+
     def __getitem__(self, idx):
+
         idx = idx % len(self.df)
         if self.args.overfit:
             idx = 0
@@ -33,7 +55,8 @@ class MDGenDataset(torch.utils.data.Dataset):
             full_name = f"{name}_R{i}"
         else:
             full_name = name
-        arr = np.lib.format.open_memmap(f'{self.args.data_dir}/{full_name}{self.args.suffix}.npy', 'r')
+
+        arr = np.lib.format.open_memmap(f'{self.data_dir}/{full_name}{self.args.suffix}.npy', 'r')
         if self.args.frame_interval:
             arr = arr[::self.args.frame_interval]
         

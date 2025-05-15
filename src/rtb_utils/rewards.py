@@ -7,6 +7,7 @@ from openmm.app.element import Element
 from openmm.unit import nanometer, bar, kelvin, picosecond, femtosecond
 from openmm import LangevinMiddleIntegrator, Platform, Vec3, MonteCarloBarostat
 from tqdm import tqdm
+from rtb_utils.simple_io import *
 
 from mdgen.utils import atom14_to_pdb
 
@@ -65,7 +66,7 @@ class Amber14Reward(nn.Module):
         self.platform = Platform.getPlatformByName(self.device)
         self.integrator = LangevinMiddleIntegrator(350 * kelvin, friction_coeff / picosecond, dt)
 
-    def forward(self, sequence, data_path, tmp_dir='../samples/'):
+    def forward(self, data_path, paths=None, tmp_dir='../samples/'):
         """
         Compute energies for a batch of conformations.
 
@@ -80,65 +81,83 @@ class Amber14Reward(nn.Module):
         """
         # Create the base PDB and modeller using the provided template PDB file.
 
-        t0 = time()
-        pdb = PDBFile(f'{data_path}/4AA_sims/FLRH/{sequence}.pdb')
-        traj = mdtraj.load(f'{tmp_dir}{sequence}.xtc',
-                           top=f'{tmp_dir}{sequence}_0.pdb')
-        torsions = np.load(f'{tmp_dir}{sequence}_torsions.npy')
+        peptides = np.unique([n[:4] for n in get_filenames(f'{tmp_dir}')])
+        logs = {}
 
-        energies = []
+        if paths is not None:
+            logrs = torch.zeros(len(paths)).float()
+        else:
+            paths = get_filenames(f'{tmp_dir}', ends_with='.pdb')
+            logrs = torch.zeros(len(get_filenames(f'{tmp_dir}', ends_with='.pdb'))).float()
 
-        # Depending on how your topology is ordered, you might need to reshape or re-order the positions.
-        # Here, we assume that the full set of positions for the protein is a flattened (T*L, 3) array.
-        print("computing energies")
-        print(len(traj.xyz))
-        for i in tqdm(range(len(traj.xyz)), total=len(traj.xyz)):
+        for peptide in peptides:
+            idx = [i for i in range(len(paths)) if peptide in paths[i]]
 
-            modeller = Modeller(pdb.topology, traj.xyz[i])
-            modeller.addHydrogens(self.forcefield, pH=7)
+            if len(idx) == 0:
+                continue
 
-            # Build the system (using implicit or explicit solvent as needed).
-            if self.implicit:
-                system = self.forcefield.createSystem(modeller.topology, constraints=HBonds)
-            else:
-                # the code block below is generally quite slow
-                modeller.addSolvent(self.forcefield, padding=1.0 * nanometer)
-                system = self.forcefield.createSystem(
-                    modeller.topology,
-                    nonbondedMethod=PME,
-                    nonbondedCutoff=1.0 * nanometer,
-                    constraints=HBonds
-                )
+            t0 = time()
+            # pdb = PDBFile(f'{data_path}/4AA_sims/{peptide}/{peptide}.pdb')
+            traj = mdtraj.load(f'{tmp_dir}{peptide}.xtc', top=f'{tmp_dir}{peptide}_0.pdb')
+            torsions = np.load(f'{tmp_dir}{peptide}_torsions.npy')
+            omm_top = traj.topology.to_openmm()
 
-            # Create the integrator and simulation.
-            dt = 2 * femtosecond
-            integrator = LangevinMiddleIntegrator(350 * kelvin, self.friction_coeff / picosecond, dt)
-            simulation = Simulation(modeller.topology, system, integrator,
-                                    platform=Platform.getPlatformByName(DEVICE))
-            # Set the initial positions from the template (or modeller) – will be overwritten.
-            simulation.context.setPositions(modeller.positions)
+            energies = []
 
-            # If using explicit solvent, add a barostat (and reinitialize if needed).
-            if not self.implicit:
-                system.addForce(MonteCarloBarostat(1 * bar, 350 * kelvin))
-                simulation.context.reinitialize(preserveState=True)
+            # Here, we assume that the full set of positions for the protein is a flattened (T*L, 3) array.
+            print("computing energies")
+            print(len(traj.xyz))
+            for i in tqdm(range(len(traj.xyz)), total=len(traj.xyz)):
 
-            state = simulation.context.getState(getEnergy=True)
-            energy = state.getPotentialEnergy()
-            energies.append(energy._value)
+                modeller = Modeller(omm_top, traj.xyz[i])
+
+                # Add hydrogens to the modeller.
+                modeller.addHydrogens(self.forcefield, pH=7)
+
+                # Build the system (using implicit or explicit solvent as needed).
+                if self.implicit:
+                    system = self.forcefield.createSystem(modeller.topology, constraints=HBonds)
+                else:
+                    # the code block below is generally quite slow
+                    modeller.addSolvent(self.forcefield, padding=1.0 * nanometer)
+                    system = self.forcefield.createSystem(
+                        modeller.topology,
+                        nonbondedMethod=PME,
+                        nonbondedCutoff=1.0 * nanometer,
+                        constraints=HBonds
+                    )
+
+                # Create the integrator and simulation.
+                dt = 2 * femtosecond
+                integrator = LangevinMiddleIntegrator(350 * kelvin, self.friction_coeff / picosecond, dt)
+                simulation = Simulation(modeller.topology, system, integrator,
+                                        platform=Platform.getPlatformByName(DEVICE))
+                # Set the initial positions from the template (or modeller) – will be overwritten.
+                simulation.context.setPositions(modeller.positions)
+
+                # If using explicit solvent, add a barostat (and reinitialize if needed).
+                if not self.implicit:
+                    system.addForce(MonteCarloBarostat(1 * bar, 350 * kelvin))
+                    simulation.context.reinitialize(preserveState=True)
+
+                state = simulation.context.getState(getEnergy=True)
+                energy = state.getPotentialEnergy()
+                energies.append(energy._value)
+
+            t1 = time()
+            logrs[idx] = torch.FloatTensor(energies)
+            print(f"elapsed {t1 - t0} for peptide {peptide}")
+            logs[peptide] = {
+                'log_r': -torch.FloatTensor(energies) / self.energy_temperature,
+                'x': traj.xyz,
+                'torsions': torsions,
+            }
 
         print("removing pdb files")
         for f in glob.glob(os.path.join(tmp_dir, "*.pdb")) + glob.glob(os.path.join(tmp_dir, "*.xtc")):
             os.remove(f)
 
-        t1 = time()
-        print(f"elapsed {t1 - t0}")
-
-        return {
-            'log_r': -torch.FloatTensor(energies)/self.energy_temperature,
-            'x': traj.xyz,
-            'torsions': torsions,
-        }
+        return logs, logrs
 
 
     # def forward(self, sequence, data_path, tmp_dir='../samples/'):
