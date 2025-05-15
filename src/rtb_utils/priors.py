@@ -87,7 +87,7 @@ class MDGenSimulator:
         self.target_dist = {}
 
         trainset = MDGenDataset(self.config,
-                                split="../splits/4AA_train.csv",
+                                split=f"{self.config.splits_path}4AA_train.csv",
                                 peptide=self.peptide,
                                 data_dir=self.data_dir)
 
