@@ -432,9 +432,9 @@ class RTBTrainer(Trainer):
                         vargrad_logzs = torch.zeros(len(cond_args['peptide'])).float()
                         for peptide in peptides:
                             idx = [i for i in range(len(cond_args['peptide'])) if peptide == cond_args['peptide'][i]]
-                            vargrad = (- results_dict['logpf_posterior'][idx]
-                                       + log_pf_prior_or_pb[idx]
-                                       + logr_x_prime[idx]).mean().detach()
+                            vargrad = (- results_dict['logpf_posterior'][idx].to(self.config.device)
+                                       + log_pf_prior_or_pb[idx].to(self.config.device)
+                                       + logr_x_prime[idx].to(self.config.device)).mean().detach()
 
                             results_dict['logZ'][peptide] = vargrad.item()
                             vargrad_logzs[idx] = vargrad
