@@ -101,7 +101,7 @@ class MDGenSimulator:
         self.batch = self._get_batch()
         self.dims = self.model.get_dims(self.batch)
 
-    def _get_batch(self, multi_peptide=True, size=None):
+    def _get_batch(self, device='cpu', multi_peptide=True, size=None):
         """
         Prepare a batch for simulation.
 
@@ -123,7 +123,7 @@ class MDGenSimulator:
                 if k == 'name':
                     batch[k] = [v[0]] * multiplier
                 else:
-                    batch[k] = v[0].unsqueeze(0).repeat_interleave(repeats=multiplier, dim=0)
+                    batch[k] = v[0].to(device).unsqueeze(0).repeat_interleave(repeats=multiplier, dim=0)
         else:
 
             if size is None:
@@ -135,12 +135,12 @@ class MDGenSimulator:
                 if k == 'name':
                     batch[k] = list(chain.from_iterable(repeat(x, multiplier) for x in v))
                 else:
-                    batch[k] = v.repeat_interleave(repeats=multiplier, dim=0)
+                    batch[k] = v.to(device).repeat_interleave(repeats=multiplier, dim=0)
 
         return batch
 
     def get_cond_args(self, device, multi_peptide=True, size=None):
-        batch = self._get_batch(multi_peptide=multi_peptide, size=size)
+        batch = self._get_batch(device, multi_peptide=multi_peptide, size=size)
 
         prep = self.model.prep_batch(batch)
         cond_args = prep['model_kwargs']
