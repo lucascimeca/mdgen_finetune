@@ -445,6 +445,10 @@ class RTBTrainer(Trainer):
                         results_dict['logZ'] = self.sampler.logZ.item()
 
                 # compute loss rtb for posterior
+                print(results_dict['logpf_posterior'])
+                print(self.sampler.logZ)
+                print(log_pf_prior_or_pb)
+                print(logr_x_prime)
                 loss = 0.5 * (((results_dict['logpf_posterior'] + self.sampler.logZ - log_pf_prior_or_pb - logr_x_prime) ** 2)
                               - self.config.learning_cutoff).relu()
 
