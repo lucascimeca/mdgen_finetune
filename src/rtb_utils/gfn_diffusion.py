@@ -409,11 +409,12 @@ class RTBTrainer(Trainer):
             # get reward
             if logr_x_prime is None:
                 _, _, _, paths = self.sampler.prior_model.sample(batch=batch, zs0=results_dict['x'].to(self.config.device).detach())  # sample in place, forms pdbs on disk
-                rwd_logs, logr_x_prime = self.reward_function(
+                res = self.reward_function(
                     paths=paths,
                     data_path=self.sampler.config.data_path,
                     tmp_dir=self.sampler.prior_model.out_dir
                 )  # compute reward of whatever is in data_path, then cleans it up
+                rwd_logs, logr_x_prime = res[0], res[1].to(self.config.device)
 
             self.running_dist = logr_x_prime
 
@@ -432,9 +433,9 @@ class RTBTrainer(Trainer):
                         vargrad_logzs = torch.zeros(len(cond_args['peptide'])).float()
                         for peptide in peptides:
                             idx = [i for i in range(len(cond_args['peptide'])) if peptide == cond_args['peptide'][i]]
-                            vargrad = (- results_dict['logpf_posterior'][idx].to(self.config.device)
-                                       + log_pf_prior_or_pb[idx].to(self.config.device)
-                                       + logr_x_prime[idx].to(self.config.device)).mean().detach()
+                            vargrad = (- results_dict['logpf_posterior'][idx]
+                                       + log_pf_prior_or_pb[idx]
+                                       + logr_x_prime[idx]).mean().detach()
 
                             results_dict['logZ'][peptide] = vargrad.item()
                             vargrad_logzs[idx] = vargrad
