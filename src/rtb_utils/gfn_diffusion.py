@@ -303,15 +303,12 @@ class FinetunePlotter: # self.sampler.prior_model, self.reward_function, self.sa
                     prior_model.fix_and_save_pdbs(torch.FloatTensor(arr[idxes]), peptide)
 
             # save all the frames from the actual data
-            prior_model.target_dist = reward_function(data_path=config.data_path, tmp_dir=prior_model.out_dir)[0]
+            prior_model.target_dist.update(reward_function(data_path=config.data_path, tmp_dir=prior_model.out_dir)[0])
             print("Done!")
 
             print("Generating energy distribution for current model iteration")
 
-            results_dict = sampler(
-                batch_size=config.test_sample_size,
-                condition=cond_args
-            )
+            results_dict = sampler(batch_size=config.test_sample_size, condition=cond_args)
             _, _, _, paths = prior_model.sample(batch=batch, zs0=results_dict['x'].to(config.device).detach())  # sample in place, forms pdbs on disk
             rwd_logs, logrs = reward_function(
                 paths=paths,
@@ -323,10 +320,13 @@ class FinetunePlotter: # self.sampler.prior_model, self.reward_function, self.sa
                 logs[peptide] = {}
 
                 print("Distribution generated!")
-                logs[peptide].update(compare_distributions(
-                    sampler.prior_model.target_dist[peptide]['log_r'].detach().cpu(),
-                    rwd_logs[peptide]['log_r'].to(sampler.device).detach().cpu())
-                )
+                try:
+                    logs[peptide].update(compare_distributions(
+                        sampler.prior_model.target_dist[peptide]['log_r'].detach().cpu(),
+                        rwd_logs[peptide]['log_r'].to(sampler.device).detach().cpu())
+                    )
+                except Exception as e:
+                    pass
                 logs[peptide].update(plot_relative_distance_distributions(
                     xyz=rwd_logs[peptide]['x'],
                     n_plots=4,  # Show 4 comparison columns
