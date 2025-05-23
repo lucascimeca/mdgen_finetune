@@ -209,7 +209,28 @@ class Logger:
                     self.logs[key].append(results[key])
     def print(self, it=None):
         it = it if it is not None else ''
-        print(f"it {it}: " + ", ".join([f"{key}: {np.mean(value[-10:]):.4f}" for key, value in self.logs.items()]))
+
+        txt = f"it {it}: "
+        parameters = []
+        for key, value in self.logs.items():
+            if isinstance(value[0], dict):
+                ks = {}
+                for i in range(min(10, len(value))):
+                    for k, v in value[-i].items():
+                        if k not in ks.keys():
+                            ks[k] = []
+                        ks[k].append(v)
+                for k in ks.keys():
+                    parameters.append(f"{key}_{k}: {np.mean(ks[k][-10:]):.4f}")
+            else:
+                parameters.append(f"{key}: {np.mean(value[-10:]):.4f}")
+        txt += ", ".join(parameters)
+        print(txt)
+        try:
+            print(f"it {it}: " + ", ".join([f"{key}: {np.mean(value[-10:]):.4f}" for key, value in self.logs.items()]))
+        except Exception as e:
+            print(f"it {it}: " + ", ".join([f"{key}: {value[-10:]}" for key, value in self.logs.items()]))
+            print(e)
 
     def save(self):
         save_dict_to_file(data=self.logs, path=self.args.save_folder, filename='run_logs', format='json', replace=True)
