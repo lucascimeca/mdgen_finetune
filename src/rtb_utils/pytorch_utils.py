@@ -213,7 +213,7 @@ class Logger:
         txt = f"it {it}: "
         parameters = []
         for key, value in self.logs.items():
-            if isinstance(value[0], dict):
+            if len(value) > 0 and isinstance(value[0], dict):
                 ks = {}
                 for i in range(min(10, len(value))):
                     for k, v in value[-i].items():
