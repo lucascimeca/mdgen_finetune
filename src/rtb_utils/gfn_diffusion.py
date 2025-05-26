@@ -2,7 +2,7 @@ import diffusers
 
 from diffusers import DDPMPipeline, DDPMScheduler
 from peft import LoraConfig, get_peft_model
-from rtb_utils.pytorch_utils import NoContext, freeze_model, unfreeze_model, safe_reinit, Logger
+from rtb_utils.pytorch_utils import NoContext, freeze_model, unfreeze_model, safe_reinit, Logger, flatten_logs
 from rtb_utils.plot_utils import compare_distributions, plot_relative_distance_distributions, plot_TICA, plot_TICA_PCA
 from models.samplers import PosteriorPriorDGFN, PosteriorPriorDGFN, PosteriorPriorBaselineSampler
 
@@ -252,7 +252,7 @@ class Trainer:
                         if isinstance(v, torch.Tensor):
                             results_dict[k] = v.mean().item()
 
-                    wandb.log(data=results_dict, step=it)  # log results in wandb
+                    wandb.log(data=flatten_logs(results_dict), step=it)  # log results in wandb
 
                 torch.cuda.empty_cache()
 

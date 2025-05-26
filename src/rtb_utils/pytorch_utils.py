@@ -247,3 +247,36 @@ def cycle(dl):
     while True:
         for data in dl:
             yield data
+
+
+def flatten_logs(d: dict, parent_keys=None) -> dict:
+    """
+    Flattens a nested dict so that for each leaf value the key becomes:
+      parent1.parent2/.../parentN/leaf
+    where the join between parent keys is '.', and the final separator before
+    the leaf key is '/'.
+
+    Examples:
+        {"loss": 0.5}
+          → {"loss": 0.5}
+        {"kpis": {"k1": 1.0, "k2": 2.0}}
+          → {"kpis/k1": 1.0, "kpis/k2": 2.0}
+        {"outer": {"inner": {"x": 42}}}
+          → {"outer.inner/x": 42}
+    """
+    flat = {}
+    parent_keys = parent_keys or []
+
+    for key, val in d.items():
+        path = parent_keys + [key]
+        if isinstance(val, dict):
+            flat.update(flatten_logs(val, path))
+        else:
+            if len(path) == 1:
+                flat_key = path[0]
+            else:
+                prefix = ".".join(path[:-1])
+                flat_key = f"{prefix}/{path[-1]}"
+            flat[flat_key] = val
+
+    return flat
