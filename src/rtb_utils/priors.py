@@ -78,7 +78,7 @@ class MDGenSimulator:
         os.makedirs(self.out_dir, exist_ok=True)
 
         # Load the simulation model.
-        self.model = NewMDGenWrapper.load_from_checkpoint(self.sim_ckpt)
+        self.model = NewMDGenWrapper.load_from_checkpoint(self.sim_ckpt, weights_only=False)
         self.model.eval().to(self.device)
 
         # Load the split file.
