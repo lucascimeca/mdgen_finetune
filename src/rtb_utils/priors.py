@@ -27,7 +27,7 @@ class MDGenSimulator:
                  sim_ckpt,
                  data_dir,
                  peptide=None,
-                 split='splits/4AA_test.csv',
+                 split='splits/4AA_train.csv',
                  suffix='',
                  pdb_id=None,
                  num_frames=1,
