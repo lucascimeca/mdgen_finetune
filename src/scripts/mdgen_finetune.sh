@@ -29,6 +29,8 @@ module load cuda/11.8
 # Activate pre-existing environment.
 conda activate /home/mila/l/luca.scimeca/scratch/envs/mdgen
 
+# conda create /home/mila/l/luca.scimeca/scratch/envs/mdgen numpy==1.21.2 pandas==1.5.3 torch==1.12.1+cu113 -f https://download.pytorch.org/whl/torch_stable.html pytorch_lightning==2.0.4 mdtraj==1.9.9 biopython==1.79 wandb dm-tree einops torchdiffeq fair-esm pyEMMA matplotlib==3.7.2 numpy==1.21.2
+
 git pull
 
 
