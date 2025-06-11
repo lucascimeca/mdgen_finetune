@@ -312,11 +312,11 @@ class FinetunePlotter: # self.sampler.prior_model, self.reward_function, self.sa
             )
             print("Done!")
 
+            print(f"test_size: {config.test_sample_size}")
+            [print(f"{k}: {v.shape}") for k, v in cond_args.items() if isinstance(v, torch.Tensor)]
             print("Generating energy distribution for current model iteration")
 
             results_dict = sampler(batch_size=config.test_sample_size, condition=cond_args)
-            print(f"test_size: {config.test_sample_size}")
-            [print(f"{k}: {v.shape}") for k, v in cond_args.items() if isinstance(v, torch.Tensor)]
             _, _, _, paths = prior_model.sample(batch=batch, zs0=results_dict['x'].to(config.device).detach())  # sample in place, forms pdbs on disk
             rwd_logs, logrs = reward_function(
                 paths=paths,
