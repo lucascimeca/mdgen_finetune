@@ -146,6 +146,7 @@ class MDGenSimulator:
         return batch
 
     def get_cond_args(self, device, multi_peptide=True, size=None):
+        print(f"HERE SIZE {size}")
         batch = self._get_batch(device, multi_peptide=multi_peptide, size=size)
 
         prep = self.model.prep_batch(batch)
