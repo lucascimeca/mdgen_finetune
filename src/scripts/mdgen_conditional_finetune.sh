@@ -61,4 +61,3 @@ python ../outsourced_train_conditional_posterior.py --epochs 5000 --traj_length 
                                                     --load_outsourced_path ../../pretrained/mdgen_source_sampler.bin \
                                                     --push_to_wandb True --resume True --load_outsourced_ckpt False \
                                                     --xT_type uniform --rb_ratio .2 -rb False
-

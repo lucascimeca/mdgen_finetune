@@ -117,6 +117,7 @@ def fetch_args(experiment_run=True, exp_prepend='exp', ldm=None):
 
     # Paths
     parser.add_argument('--splits_path', default='../splits/', type=str, help='Path to save model checkpoints')
+    parser.add_argument('--splits_file', default='4AA_train.csv', type=str, help='File to load the splits')
     parser.add_argument('--load_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')
 
     parser.add_argument('--load_outsourced_ckpt', default=True, type=strtobool, help='Whether to load checkpoint')

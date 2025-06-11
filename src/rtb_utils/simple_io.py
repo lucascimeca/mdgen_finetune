@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from os import path as pt
 from pprint import pprint
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 import zipfile
 
 
@@ -204,27 +204,110 @@ def load_dataframe_dict(dataset_name, path=''):
         return data.item()
     else:
         return None
+#
+#
+# def save_dict_to_file(data=None, path=None, filename=None, format='json', replace=True):
+#     # if don't want to overwrite, check next available name
+#     if path.endswith(format):
+#         file = path
+#     else:
+#         file = "{}{}.{}".format(path, filename, format)
+#
+#     if not replace:
+#         num = 0
+#         while file_exists(file):
+#             file = "{}{}-({}).{}".format(path, filename, num, format)
+#             num += 1
+#     try:
+#         with open(file, 'w') as exp_file:
+#             json.dump(data, exp_file)
+#     except Exception as e:
+#         print(f"WARNING: could not save FILE {filename} at {path}")
+#         print(f"{e.__class__.__name__}: {e}")
+#
+#
+# def load_dict_from_file(path):
+#     with open(path, 'r') as f:
+#         return json.load(f)
 
 
-def save_dict_to_file(data=None, path=None, filename=None, format='json', replace=True):
-    # if don't want to overwrite, check next available name
-    file = "{}{}.{}".format(path, filename, format)
+
+def _to_cpu(obj):
+    """
+    Recursively move any torch.Tensor to CPU and detach,
+    leave everything else untouched.
+    """
+    if isinstance(obj, torch.Tensor):
+        return obj.detach().cpu()
+    if isinstance(obj, Mapping):
+        return {k: _to_cpu(v) for k, v in obj.items()}
+    if isinstance(obj, Sequence) and not isinstance(obj, (str, bytes)):
+        # preserve list/tuple type
+        return type(obj)(_to_cpu(v) for v in obj)
+    return obj
+
+
+def _to_device(obj, device):
+    """
+    Recursively move any torch.Tensor to the given device,
+    leave everything else untouched.
+    """
+    if isinstance(obj, torch.Tensor):
+        return obj.to(device)
+    if isinstance(obj, Mapping):
+        return {k: _to_device(v, device) for k, v in obj.items()}
+    if isinstance(obj, Sequence) and not isinstance(obj, (str, bytes)):
+        return type(obj)(_to_device(v, device) for v in obj)
+    return obj
+
+
+def save_dict_to_file(data, path, filename=None, replace=True, ext="pt"):
+    """
+    Save a nested dict (with numpy arrays or torch.Tensors) efficiently
+    using torch.save (binary pickle under the hood).
+
+    • data:      your nested dict
+    • path:      either a full filename ending in “.pt” or a directory
+    • filename:  if path is a directory, the name (no “.pt”)
+    • replace:   if False, find next free “name-1.pt”, “name-2.pt”, …
+    """
+    # Determine final filepath
+
+    if path.endswith(ext):
+        filepath = path
+    else:
+        if filename is None:
+            raise ValueError("must provide filename when path is a directory")
+        filepath = os.path.join(path, filename + f".{ext}")
+
     if not replace:
-        num = 0
-        while file_exists(file):
-            file = "{}{}-({}).{}".format(path, filename, num, format)
-            num += 1
-    try:
-        with open(file, 'w') as exp_file:
-            json.dump(data, exp_file)
-    except Exception as e:
-        print(f"WARNING: could not save FILE {filename} at {path}")
-        print(f"{e.__class__.__name__}: {e}")
+        base, _ = os.path.splitext(filepath)
+        idx = 1
+        while os.path.exists(filepath):
+            filepath = f"{base}-{idx}.{ext}"
+            idx += 1
+
+    # detach & move all tensors to CPU
+    cleaned = _to_cpu(data)
+    torch.save(cleaned, filepath)
+    return filepath
 
 
-def load_dict_from_file(path):
-    with open(path, 'r') as f:
-        return json.load(f)
+def load_dict_from_file(path, device=None):
+    """
+    Load back the dict you saved with save_dict_to_file.
+
+    • path:    the “.pt” file
+    • device:  if None, tensors come back on CPU (safe);
+               if torch.device or string (e.g. 'cuda:0'), will
+               move every tensor to that device.
+    """
+    # always load onto CPU first to avoid errors on machines without GPU
+    data = torch.load(path, map_location="cpu", weights_only=False)
+    if device is not None:
+        data = _to_device(data, torch.device(device))
+    return data
+
 
 def results_printer(results, filename, folder, experiment_tag="", header="", show=True):
 

@@ -106,7 +106,7 @@ class Amber14Reward(nn.Module):
 
             # Here, we assume that the full set of positions for the protein is a flattened (T*L, 3) array.
             print("computing energies")
-            print(len(traj.xyz))
+            # print(len(traj.xyz))
             for i in tqdm(range(len(traj.xyz)), total=len(traj.xyz)):
 
                 modeller = Modeller(omm_top, traj.xyz[i])

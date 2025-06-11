@@ -10,6 +10,7 @@ from mdgen.tensor_utils import tensor_tree_map
 from mdgen.wrapper import NewMDGenWrapper
 from mdgen.utils import atom14_to_pdb
 from mdgen.dataset import MDGenDataset
+from rtb_utils.simple_io import *
 
 import os
 import time
@@ -27,7 +28,7 @@ class MDGenSimulator:
                  sim_ckpt,
                  data_dir,
                  peptide=None,
-                 split='splits/4AA_train.csv',
+                 split='splits/4AA_test.csv',
                  suffix='',
                  pdb_id=None,
                  num_frames=1,
@@ -84,10 +85,15 @@ class MDGenSimulator:
         # Load the split file.
         self.df = pd.read_csv(self.split, index_col='name')
 
-        self.target_dist = {}
+        self.target_dist_path = self.config.save_folder + "../target_dist.pt"
+        if file_exists(self.target_dist_path):
+            self.target_dist = load_dict_from_file(self.target_dist_path)
+        else:
+
+            self.target_dist = {}
 
         trainset = MDGenDataset(self.config,
-                                split=f"{self.config.splits_path}4AA_train.csv",
+                                split=self.split,
                                 peptide=self.peptide,
                                 data_dir=self.data_dir)
 

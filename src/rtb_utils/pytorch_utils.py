@@ -233,10 +233,10 @@ class Logger:
             print(e)
 
     def save(self):
-        save_dict_to_file(data=self.logs, path=self.args.save_folder, filename='run_logs', format='json', replace=True)
+        save_dict_to_file(data=self.logs, path=self.args.save_folder, filename='run_logs', replace=True)
 
     def save_args(self):
-        save_dict_to_file(data=self.args.__dict__, path=self.args.save_folder, filename='run_args', format='json', replace=True)
+        save_dict_to_file(data=self.args.__dict__, path=self.args.save_folder, filename='run_args', replace=True)
 
     def load(self, path):
         self.args = load_dict_from_file(f"{path}/run_args.json")
