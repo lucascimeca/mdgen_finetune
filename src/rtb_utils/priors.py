@@ -154,6 +154,8 @@ class MDGenSimulator:
         for k, v in cond_args.items():
             cond_args[k] = v.to(device)
         cond_args['peptide'] = batch['name']
+
+        [print(f"{k}: {v.shape}") for k, v in cond_args.items() if isinstance(v, torch.Tensor)]
         return cond_args, batch
 
     def _rollout(self, batch, zs0=None):
