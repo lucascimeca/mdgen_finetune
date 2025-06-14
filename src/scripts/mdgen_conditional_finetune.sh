@@ -57,7 +57,7 @@ python ../outsourced_train_conditional_posterior.py --epochs 5000 --traj_length 
                                                     --save_folder ~/scratch/mdgen/results/ --data_path ~/scratch/mdgen/data/ \
                                                     --splits_path ../../splits/ --lora False --load_path ../../pretrained/ \
                                                     --method rtb --learning_rate 6e-4 --energy_temperature 1. \
-                                                    --vargrad True --vargrad_sample_n0 4 --test_sample_size 50 \
+                                                    --vargrad True --vargrad_sample_n0 4 --test_sample_size 56 \
                                                     --load_outsourced_path ../../pretrained/mdgen_source_sampler.bin \
                                                     --push_to_wandb True --resume True --load_outsourced_ckpt False \
                                                     --xT_type uniform --rb_ratio .2 -rb False

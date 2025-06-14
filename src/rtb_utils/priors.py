@@ -102,6 +102,7 @@ class MDGenSimulator:
             batch_size=int(self.config.batch_size // self.config.vargrad_sample_n0),
             num_workers=0,
             shuffle=True,
+            drop_last=True,
         )))
 
         self.batch = self._get_batch()
