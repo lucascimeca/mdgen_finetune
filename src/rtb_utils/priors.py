@@ -147,7 +147,7 @@ class MDGenSimulator:
         return batch
 
     def get_cond_args(self, device, multi_peptide=True, size=None):
-        print(f"HERE SIZE {size}")
+        # print(f"HERE SIZE {size}")
         batch = self._get_batch(device, multi_peptide=multi_peptide, size=size)
 
         prep = self.model.prep_batch(batch)
@@ -156,7 +156,8 @@ class MDGenSimulator:
             cond_args[k] = v.to(device)
         cond_args['peptide'] = batch['name']
 
-        [print(f"{k}: {v.shape}") for k, v in cond_args.items() if isinstance(v, torch.Tensor)]
+        # DEBUG shape prints
+        # [print(f"{k}: {v.shape}") for k, v in cond_args.items() if isinstance(v, torch.Tensor)]
         return cond_args, batch
 
     def _rollout(self, batch, zs0=None):

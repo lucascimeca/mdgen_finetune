@@ -212,7 +212,7 @@ class Trainer:
                 if loss is not None:
                     self.accelerator.backward(loss)
 
-            # self.accelerator.clip_grad_norm_(self.sampler.posterior_node.policy.unet.parameters(), 10.0)
+            self.accelerator.clip_grad_norm_(self.sampler.posterior_node.policy.unet.parameters(), 1.0)
             self.opt.step()
             self.opt.zero_grad()
 
@@ -313,7 +313,9 @@ class FinetunePlotter: # self.sampler.prior_model, self.reward_function, self.sa
             print("Done!")
 
             print(f"test_size: {config.test_sample_size}")
-            [print(f"{k}: {v.shape}") for k, v in cond_args.items() if isinstance(v, torch.Tensor)]
+
+            # DEBUG shape prints
+            # [print(f"{k}: {v.shape}") for k, v in cond_args.items() if isinstance(v, torch.Tensor)]
             print("Generating energy distribution for current model iteration")
 
             results_dict = sampler(batch_size=config.test_sample_size, condition=cond_args)
@@ -413,10 +415,6 @@ class RTBTrainer(Trainer):
                 detach_freq=self.config.detach_freq,
                 condition=cond_args,
             )
-
-            print("####### DEBUG #########")
-            print(results_dict['x'].mean().item(), results_dict['x'].std().item(), results_dict['x'].min().item(), results_dict['x'].max().item())
-            print("#######################")
 
             # get reward
             if logr_x_prime is None:
