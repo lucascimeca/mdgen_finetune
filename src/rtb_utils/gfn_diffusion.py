@@ -415,7 +415,8 @@ class RTBTrainer(Trainer):
             )
 
             print("####### DEBUG #########")
-            print(results_dict['x'].mean().item(), results_dict['x'].std().item(), results_dict['x'].min().item(), results_dict['x'].max().item())            print("#######################")
+            print(results_dict['x'].mean().item(), results_dict['x'].std().item(), results_dict['x'].min().item(), results_dict['x'].max().item())
+            print("#######################")
 
             # get reward
             if logr_x_prime is None:
