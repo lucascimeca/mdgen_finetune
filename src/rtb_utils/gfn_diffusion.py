@@ -212,7 +212,7 @@ class Trainer:
                 if loss is not None:
                     self.accelerator.backward(loss)
 
-            self.accelerator.clip_grad_norm_(self.sampler.posterior_node.policy.unet.parameters(), 10.0)
+            # self.accelerator.clip_grad_norm_(self.sampler.posterior_node.policy.unet.parameters(), 10.0)
             self.opt.step()
             self.opt.zero_grad()
 
@@ -413,6 +413,9 @@ class RTBTrainer(Trainer):
                 detach_freq=self.config.detach_freq,
                 condition=cond_args,
             )
+
+            print("####### DEBUG #########")
+            print(results_dict['x'].mean().item(), results_dict['x'].std().item(), results_dict['x'].min().item(), results_dict['x'].max().item())            print("#######################")
 
             # get reward
             if logr_x_prime is None:

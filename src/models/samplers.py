@@ -402,10 +402,10 @@ class PosteriorPriorDGFN(nn.Module):
 
         if self.config.xT_type == 'uniform':
             xT_dist = torch.distributions.Uniform(torch.ones((batch_size,) + tuple(self.dim), device=self.device) * -3,
-                                                      torch.ones((batch_size,) + tuple(self.dim), device=self.device) * 3)
+                                                  torch.ones((batch_size,) + tuple(self.dim), device=self.device) * 3)
         else:
             xT_dist = torch.distributions.Normal(torch.zeros((batch_size,) + tuple(self.dim), device=self.device),
-                                                     torch.ones((batch_size,) + tuple(self.dim), device=self.device))
+                                                 torch.ones((batch_size,) + tuple(self.dim), device=self.device))
 
         x = xT_dist.sample() if x_start is None else x_start
         if self.mixed_precision and 'cuda' in self.device:
@@ -431,7 +431,7 @@ class PosteriorPriorDGFN(nn.Module):
 
         for i, t in tqdm(enumerate(sampling_times), total=len(sampling_times)):
 
-            t_next = scheduler.next_timestep(t) # t_next = t + step -> since later the step function naturally goes from t_next to t_next + step = t
+            t_next = scheduler.next_timestep(t)  # t_next = t + step -> since later the step function naturally goes from t_next to t_next + step = t
 
             t_specific_args = {
                 'noise': None if t > 0. else 0.,
@@ -440,7 +440,7 @@ class PosteriorPriorDGFN(nn.Module):
             }
 
             step_args = self.get_schedule_args()
-            step_args.update(t_specific_args)
+            step_args.update(t_specific_args) 
 
             # extra params
             step_args['condition'] = condition
